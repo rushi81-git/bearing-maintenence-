@@ -1,0 +1,40 @@
+{
+  "model_name": "Random Forest",
+  "model_version": "svm_cwru_1024_features_v1",
+  "test_accuracy": 0.8989130434782608,
+  "macro_f1": 0.8971570275410489,
+  "weighted_f1": 0.8971570275410488,
+  "cv_mean": 0.8968944099378883,
+  "cv_std": 0.01404743214645793,
+  "features": [
+    "max",
+    "min",
+    "mean",
+    "std",
+    "rms",
+    "skewness",
+    "kurtosis",
+    "crest_factor",
+    "shape_factor",
+    "peak_to_peak",
+    "mean_absolute_value",
+    "variance"
+  ],
+  "n_classes": 10,
+  "classes": [
+    "Ball_007",
+    "Ball_014",
+    "Ball_021",
+    "IR_007",
+    "IR_014",
+    "IR_021",
+    "Normal",
+    "OR_007",
+    "OR_014",
+    "OR_021"
+  ],
+  "split_method": "block_split (leakage-safe)",
+  "train_samples": 3220,
+  "test_samples": 920,
+  "timestamp": "2026-08-21T14:26:48.942646"
+}

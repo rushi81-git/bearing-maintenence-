@@ -1,0 +1,82 @@
+{
+  "0": {
+    "class_name": "Ball_007",
+    "fault_type": "Ball",
+    "fault_size_inches": 0.007,
+    "fault_size_mm": 0.178,
+    "severity": "Mild",
+    "bearing_status": "Fault Detected"
+  },
+  "1": {
+    "class_name": "Ball_014",
+    "fault_type": "Ball",
+    "fault_size_inches": 0.014,
+    "fault_size_mm": 0.356,
+    "severity": "Moderate",
+    "bearing_status": "Fault Detected"
+  },
+  "2": {
+    "class_name": "Ball_021",
+    "fault_type": "Ball",
+    "fault_size_inches": 0.021,
+    "fault_size_mm": 0.533,
+    "severity": "Severe",
+    "bearing_status": "Fault Detected"
+  },
+  "3": {
+    "class_name": "IR_007",
+    "fault_type": "Inner Race",
+    "fault_size_inches": 0.007,
+    "fault_size_mm": 0.178,
+    "severity": "Mild",
+    "bearing_status": "Fault Detected"
+  },
+  "4": {
+    "class_name": "IR_014",
+    "fault_type": "Inner Race",
+    "fault_size_inches": 0.014,
+    "fault_size_mm": 0.356,
+    "severity": "Moderate",
+    "bearing_status": "Fault Detected"
+  },
+  "5": {
+    "class_name": "IR_021",
+    "fault_type": "Inner Race",
+    "fault_size_inches": 0.021,
+    "fault_size_mm": 0.533,
+    "severity": "Severe",
+    "bearing_status": "Fault Detected"
+  },
+  "6": {
+    "class_name": "Normal",
+    "fault_type": "Normal",
+    "fault_size_inches": 0.0,
+    "fault_size_mm": 0.0,
+    "severity": "Healthy",
+    "bearing_status": "Healthy"
+  },
+  "7": {
+    "class_name": "OR_007",
+    "fault_type": "Outer Race",
+    "fault_size_inches": 0.007,
+    "fault_size_mm": 0.178,
+    "severity": "Mild",
+    "bearing_status": "Fault Detected"
+  },
+  "8": {
+    "class_name": "OR_014",
+    "fault_type": "Outer Race",
+    "fault_size_inches": 0.014,
+    "fault_size_mm": 0.356,
+    "severity": "Moderate",
+    "bearing_status": "Fault Detected"
+  },
+  "9": {
+    "class_name": "OR_021",
+    "fault_type": "Outer Race",
+    "fault_size_inches": 0.021,
+    "fault_size_mm": 0.533,
+    "severity": "Severe",
+    "bearing_status": "Fault Detected"
+  }
+}

@@ -1,0 +1,13 @@
+# Python Machine Learning & API Dependencies
+# CWRU Bearing Fault Diagnosis System
+
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+tensorflow>=2.11.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
+pydantic>=1.10.0
+openpyxl>=3.1.0

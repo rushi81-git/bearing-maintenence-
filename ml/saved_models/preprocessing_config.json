@@ -1,0 +1,36 @@
+{
+  "window_length": 1024,
+  "feature_columns": [
+    "max",
+    "min",
+    "mean",
+    "std",
+    "rms",
+    "skewness",
+    "kurtosis",
+    "crest_factor",
+    "shape_factor",
+    "peak_to_peak",
+    "mean_absolute_value",
+    "variance"
+  ],
+  "classes": [
+    "Ball_007",
+    "Ball_014",
+    "Ball_021",
+    "IR_007",
+    "IR_014",
+    "IR_021",
+    "Normal",
+    "OR_007",
+    "OR_014",
+    "OR_021"
+  ],
+  "n_classes": 10,
+  "split_method": "block_split (70% train, 10% val, 20% test - leakage safe)",
+  "sampling_rate_hz": 48000,
+  "signal_unit": "g",
+  "train_samples": 3220,
+  "val_samples": 460,
+  "test_samples": 920
+}

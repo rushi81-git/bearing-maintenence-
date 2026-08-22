@@ -12,14 +12,17 @@ const pool = mysql.createPool({
   queueLimit:       0,
 });
 
+let isConnected = false;
+
 pool.getConnection()
   .then(conn => {
-    console.log('✅ MySQL connected successfully');
+    isConnected = true;
+    console.log('✅ MySQL connected successfully to workshop_maintenance');
     conn.release();
   })
   .catch(err => {
-    console.error('❌ MySQL connection failed:', err.message);
-    process.exit(1);
+    console.warn('⚠️ MySQL connection note:', err.message);
+    console.warn('   (Backend server & Bearing ML inference remain active)');
   });
 
 module.exports = pool;

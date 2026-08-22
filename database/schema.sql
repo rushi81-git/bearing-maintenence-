@@ -1,81 +1,91 @@
--- AI-Driven Smart Workshop Maintenance System
--- MySQL Database Schema
+-- ============================================================
+-- Workshop Maintenance System — Database Schema (v3.0 CWRU AI Edition)
+-- ============================================================
 
 CREATE DATABASE IF NOT EXISTS workshop_maintenance;
 USE workshop_maintenance;
 
--- Machines Table
+-- ────────────────────────────────────────────────────────────
+-- 1. Machines Table
+-- ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS machines (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    type VARCHAR(100) DEFAULT 'General Equipment',
-    location VARCHAR(100) DEFAULT 'Workshop Floor',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  name         VARCHAR(100) NOT NULL,
+  machine_type VARCHAR(100) DEFAULT 'General Equipment',
+  location     VARCHAR(100) DEFAULT 'Workshop Floor',
+  created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Machine Parameters Table
--- NOTE: 'operational_hours' is marked as EXCEPTION — it is a record-keeping field,
--- not a real-time sensor value. It can influence long-term wear estimates but does NOT
--- directly feed into the Random Forest risk prediction model because:
---   1. It is manually entered and may be inaccurate.
---   2. Its effect on failure is already captured indirectly through temperature/vibration trends.
---   3. Including it causes feature collinearity with tool_condition (both track wear over time).
--- It is stored for auditing/reporting but excluded from ML feature vector.
-
+-- ────────────────────────────────────────────────────────────
+-- 2. General Machine Operational Parameters Table
+-- ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS machine_parameters (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    machine_id INT NOT NULL,
-    temperature DECIMAL(6,2) NOT NULL COMMENT 'Unit: Celsius | Range: 20-120 | Used in prediction: YES',
-    vibration DECIMAL(6,3) NOT NULL COMMENT 'Unit: mm/s | Range: 0-20 | Used in prediction: YES',
-    power_usage DECIMAL(8,2) NOT NULL COMMENT 'Unit: kW | Range: 0-100 | Used in prediction: YES',
-    tool_condition DECIMAL(5,2) NOT NULL COMMENT 'Unit: % | Range: 0-100 | Used in prediction: YES',
-    operational_hours DECIMAL(10,2) DEFAULT 0 COMMENT 'Unit: hours | EXCEPTION: NOT used in ML prediction — stored for records only. See schema notes above.',
-    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  machine_id        INT NOT NULL,
+  temperature       DECIMAL(6,2)  NOT NULL    COMMENT 'Degrees Celsius',
+  vibration         DECIMAL(6,3)  NOT NULL    COMMENT 'mm/s RMS',
+  power_usage       DECIMAL(7,2)  NOT NULL    COMMENT 'kW',
+  operational_hours INT           NOT NULL    COMMENT 'Hours',
+  tool_condition    DECIMAL(5,2)  DEFAULT NULL COMMENT '% 0-100 (CNC only)',
+  recorded_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
 );
 
--- Predictions Table
-CREATE TABLE IF NOT EXISTS predictions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    machine_id INT NOT NULL,
-    risk_score DECIMAL(5,2) NOT NULL COMMENT 'Range: 0-100',
-    status ENUM('Healthy', 'Moderate', 'Critical') NOT NULL,
-    confidence DECIMAL(5,2) NOT NULL COMMENT 'Range: 0-100',
-    days_until_maintenance INT,
-    recommended_action TEXT,
-    priority ENUM('Low', 'Medium', 'High', 'Critical') NOT NULL,
-    predicted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
-);
-
--- Maintenance Schedule Table
+-- ────────────────────────────────────────────────────────────
+-- 3. Maintenance Schedule Table
+-- ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS maintenance_schedule (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    machine_id INT NOT NULL,
-    scheduled_date DATE NOT NULL,
-    estimated_duration_hours DECIMAL(4,1),
-    task_description TEXT,
-    status ENUM('Pending', 'In Progress', 'Completed', 'Cancelled') DEFAULT 'Pending',
-    priority ENUM('Low', 'Medium', 'High', 'Critical') NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
+  id                       INT AUTO_INCREMENT PRIMARY KEY,
+  machine_id               INT NOT NULL,
+  scheduled_date           DATE,
+  estimated_duration_hours DECIMAL(4,1) DEFAULT 2.0,
+  task_description         TEXT,
+  priority                 ENUM('Low','Medium','High') NOT NULL DEFAULT 'Low',
+  status                   ENUM('Pending','In Progress','Completed','Cancelled') NOT NULL DEFAULT 'Pending',
+  created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
 );
 
--- Indexes for performance
-CREATE INDEX idx_machine_params_machine_id ON machine_parameters(machine_id);
-CREATE INDEX idx_predictions_machine_id ON predictions(machine_id);
-CREATE INDEX idx_schedule_machine_id ON maintenance_schedule(machine_id);
-CREATE INDEX idx_schedule_date ON maintenance_schedule(scheduled_date);
+-- ────────────────────────────────────────────────────────────
+-- 4. Bearing Diagnoses Table (CWRU AI Offline-Trained ML Output)
+-- ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS bearing_diagnoses (
+  id                      INT AUTO_INCREMENT PRIMARY KEY,
+  machine_id              INT NULL,
+  bearing_status          VARCHAR(50) NOT NULL COMMENT 'Healthy or Fault Detected',
+  predicted_class         VARCHAR(50) NOT NULL COMMENT 'Normal, Ball_007, IR_014, etc.',
+  fault_type              VARCHAR(50) NOT NULL COMMENT 'Normal, Ball, Inner Race, Outer Race',
+  fault_size_inches       DECIMAL(6,4) DEFAULT 0.0000,
+  fault_size_mm           DECIMAL(6,4) DEFAULT 0.0000,
+  severity                VARCHAR(50) NOT NULL COMMENT 'Healthy, Mild, Moderate, Severe',
+  prediction_probability  DECIMAL(6,4) NOT NULL COMMENT 'Softmax probability 0.0000-1.0000',
+  rms                     DECIMAL(10,5) NOT NULL,
+  kurtosis                DECIMAL(10,5) NOT NULL,
+  crest_factor            DECIMAL(10,5) NOT NULL,
+  shape_factor            DECIMAL(10,5) NOT NULL,
+  peak_to_peak            DECIMAL(10,5) NOT NULL,
+  skewness                DECIMAL(10,5) NOT NULL,
+  recommendation          TEXT,
+  urgency                 VARCHAR(50),
+  model_used              VARCHAR(100) NOT NULL,
+  model_version           VARCHAR(100) NOT NULL,
+  sampling_rate_hz        INT DEFAULT 48000,
+  signal_unit             VARCHAR(20) DEFAULT 'g',
+  source_type             VARCHAR(50) DEFAULT 'csv',
+  windows_analyzed        INT DEFAULT 1,
+  source_filename         VARCHAR(255) DEFAULT NULL,
+  raw_features_json       TEXT,
+  created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE SET NULL
+);
 
--- Sample seed data
-INSERT INTO machines (name, type, location) VALUES
-('CNC Lathe Machine #1', 'CNC Machine', 'Bay A'),
-('Milling Machine #2', 'Milling', 'Bay B'),
-('Hydraulic Press #3', 'Press', 'Bay C');
-
-INSERT INTO machine_parameters (machine_id, temperature, vibration, power_usage, tool_condition, operational_hours)
-VALUES
-(1, 75.5, 3.2, 45.0, 72.0, 1200),
-(2, 85.0, 5.8, 60.5, 45.0, 2500),
-(3, 65.0, 2.1, 30.0, 90.0, 800);
+-- ────────────────────────────────────────────────────────────
+-- Performance Indexes
+-- ────────────────────────────────────────────────────────────
+CREATE INDEX idx_machine_params_machine_id  ON machine_parameters(machine_id);
+CREATE INDEX idx_schedule_machine_id        ON maintenance_schedule(machine_id);
+CREATE INDEX idx_schedule_status            ON maintenance_schedule(status);
+CREATE INDEX idx_bearing_diag_machine_id    ON bearing_diagnoses(machine_id);
+CREATE INDEX idx_bearing_diag_severity      ON bearing_diagnoses(severity);
+CREATE INDEX idx_bearing_diag_created_at    ON bearing_diagnoses(created_at);
