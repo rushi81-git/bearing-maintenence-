@@ -107,14 +107,14 @@ export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
                   width: '100%',
                   padding: hero ? '12px 14px' : '10px 14px',
                   borderRadius: 'var(--radius-md)',
-                  border: hero && isActive
+                  border: isActive
                     ? '1px solid var(--accent-border)'
                     : '1px solid transparent',
                   background: isActive
-                    ? (hero ? 'var(--accent-subtle)' : 'var(--bg-surface-raised)')
+                    ? 'var(--accent-subtle)'
                     : 'transparent',
                   color: isActive
-                    ? (hero ? 'var(--accent-primary)' : 'var(--text-primary)')
+                    ? 'var(--accent-primary)'
                     : 'var(--text-secondary)',
                   fontSize: 13,
                   fontWeight: isActive ? 600 : 500,
@@ -124,9 +124,9 @@ export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
                 }}
               >
                 <Icon
-                  size={hero ? 18 : 16}
+                  size={16}
                   style={{
-                    color: isActive ? (hero ? 'var(--accent-primary)' : 'var(--text-primary)') : 'var(--text-muted)',
+                    color: isActive ? 'var(--accent-primary)' : 'var(--text-muted)',
                     flexShrink: 0
                   }}
                 />
@@ -135,16 +135,17 @@ export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
                   <span
                     style={{
                       fontSize: 9,
-                      fontWeight: 800,
+                      fontWeight: 700,
                       textTransform: 'uppercase',
                       padding: '2px 6px',
                       borderRadius: 'var(--radius-sm)',
-                      background: 'var(--accent-primary)',
-                      color: '#000000',
-                      letterSpacing: '0.04em'
+                      background: isActive ? 'var(--accent-primary)' : 'var(--bg-surface-raised)',
+                      color: isActive ? '#000000' : 'var(--text-muted)',
+                      letterSpacing: '0.04em',
+                      fontFamily: 'var(--font-mono)'
                     }}
                   >
-                    Hero
+                    AI
                   </span>
                 )}
               </button>

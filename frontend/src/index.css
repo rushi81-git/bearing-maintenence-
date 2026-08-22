@@ -737,3 +737,18 @@ textarea.input-field { resize: vertical; min-height: 80px; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════════════
+   BEARING WORKSPACE & RESPONSIVE RULES
+══════════════════════════════════════════════ */
+@media (min-width: 768px) {
+  .stepper-connector {
+    display: block !important;
+  }
+}
+
+@media (max-width: 960px) {
+  .bearing-workspace-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
