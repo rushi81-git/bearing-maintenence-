@@ -212,6 +212,41 @@ export function TechnicalAuditSection({ diagnosisResult }) {
             </div>
           )}
 
+          {/* Autonomous Telemetry Decision Audit Card */}
+          {diagnosisResult.auto_fit_details && (
+            <div
+              style={{
+                padding: '14px 18px',
+                background: 'var(--bg-surface-sunken)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', textTransform: 'uppercase' }}>
+                  // Autonomous Model Routing Telemetry
+                </span>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                  MODE: {diagnosisResult.auto_fit_details.selection_mode || 'AUTONOMOUS'}
+                </span>
+              </div>
+
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                {diagnosisResult.auto_fit_details.selection_rationale}
+              </p>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 4, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                <span>Entropy: <strong style={{ color: 'var(--text-primary)' }}>{diagnosisResult.auto_fit_details.entropy_bits ?? 'N/A'} bits</strong></span>
+                <span>Fit Confidence: <strong style={{ color: 'var(--status-healthy)' }}>{((diagnosisResult.auto_fit_details.fit_confidence || 0) * 100).toFixed(1)}%</strong></span>
+                <span>Signal Dynamics: <strong style={{ color: 'var(--text-primary)' }}>{diagnosisResult.auto_fit_details.signal_metrics?.dynamics_classification || 'Normal'}</strong></span>
+                <span>Kurtosis: <strong style={{ color: 'var(--text-primary)' }}>{diagnosisResult.auto_fit_details.signal_metrics?.kurtosis ?? 'N/A'}</strong></span>
+              </div>
+            </div>
+          )}
+
           {/* Model Architecture & Audit Disclaimer Strip */}
           <div
             style={{

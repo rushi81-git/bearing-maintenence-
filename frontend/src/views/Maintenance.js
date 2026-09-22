@@ -10,7 +10,8 @@ const STATUS_STYLES = {
 };
 
 function StatusPill({ status }) {
-  const style = STATUS_STYLES[status] || STATUS_STYLES.pending;
+  const normalizedStatus = (status || '').toLowerCase().replace(' ', '_');
+  const style = STATUS_STYLES[normalizedStatus] || STATUS_STYLES.pending;
   return (
     <span
       style={{
@@ -34,7 +35,7 @@ function StatusPill({ status }) {
   );
 }
 
-export function Maintenance({ machines, showToast }) {
+export function Maintenance({ machines, showToast, prefillData = null, onClearPrefill = null }) {
   const [schedule, setSchedule] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -45,6 +46,23 @@ export function Maintenance({ machines, showToast }) {
     due_date: '',
     notes: ''
   });
+
+  // Auto-populate when prefillData arrives from Bearing Analysis
+  useEffect(() => {
+    if (prefillData) {
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + 3);
+      setNewEntry({
+        machine_id: prefillData.machineId || '',
+        task_type: 'Bearing Overhaul',
+        priority: prefillData.priority || 'High',
+        due_date: targetDate.toISOString().split('T')[0],
+        notes: prefillData.task || ''
+      });
+      setAddModalOpen(true);
+      if (onClearPrefill) onClearPrefill();
+    }
+  }, [prefillData, onClearPrefill]);
 
   const loadSchedule = useCallback(async () => {
     setLoading(true);
@@ -86,9 +104,9 @@ export function Maintenance({ machines, showToast }) {
     } catch (err) { showToast(err.message, 'error'); }
   };
 
-  const pendingCount = schedule.filter(s => s.status === 'pending').length;
-  const overdueCount = schedule.filter(s => s.status === 'overdue').length;
-  const completedCount = schedule.filter(s => s.status === 'completed').length;
+  const pendingCount = schedule.filter(s => (s.status || '').toLowerCase() === 'pending').length;
+  const overdueCount = schedule.filter(s => (s.status || '').toLowerCase() === 'overdue').length;
+  const completedCount = schedule.filter(s => (s.status || '').toLowerCase() === 'completed').length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }} className="animate-fade-in">
@@ -169,7 +187,7 @@ export function Maintenance({ machines, showToast }) {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <Wrench size={13} style={{ color: 'var(--text-muted)' }} />
-                          {task.task_type}
+                          {task.task_type || task.task_description || '—'}
                         </div>
                       </td>
                       <td>
@@ -193,11 +211,13 @@ export function Maintenance({ machines, showToast }) {
                         </span>
                       </td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                        {task.due_date ? new Date(task.due_date).toLocaleDateString() : '—'}
+                        {(task.due_date || task.scheduled_date)
+                          ? new Date(task.due_date || task.scheduled_date).toLocaleDateString()
+                          : '—'}
                       </td>
                       <td><StatusPill status={task.status} /></td>
-                      <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 200 }}>
-                        {task.notes || '—'}
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 200, wordBreak: 'break-word' }}>
+                        {task.notes || task.task_description || '—'}
                       </td>
                       <td>
                         <select

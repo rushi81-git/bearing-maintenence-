@@ -29,14 +29,18 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 warnings.filterwarnings('ignore')
 
-# ─── Path setup ──────────────────────────────────────────────────────────────
-PREPROCESS_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR       = os.path.dirname(PREPROCESS_DIR)
-DATA_DIR       = os.path.join(BASE_DIR, 'data')
-MODELS_DIR     = os.path.join(BASE_DIR, 'saved_models')
+PREPROCESS_DIR   = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR         = os.path.dirname(PREPROCESS_DIR)
+ROOT_DIR         = os.path.dirname(BASE_DIR)
+DATA_DIR         = os.path.join(BASE_DIR, 'data')
+MODELS_DIR       = os.path.join(BASE_DIR, 'saved_models')
+CWRU_DATASET_DIR = os.path.join(ROOT_DIR, 'CWRU_dataset')
 os.makedirs(MODELS_DIR, exist_ok=True)
 
-NPZ_PATH = os.path.join(DATA_DIR, 'CWRU_48k_load_1_CNN_data.npz')
+# Default to CWRU_dataset directory if present, otherwise ml/data
+PRIMARY_NPZ = os.path.join(CWRU_DATASET_DIR, 'CWRU_48k_load_1_CNN_data.npz')
+FALLBACK_NPZ = os.path.join(DATA_DIR, 'CWRU_48k_load_1_CNN_data.npz')
+NPZ_PATH = PRIMARY_NPZ if os.path.exists(PRIMARY_NPZ) else FALLBACK_NPZ
 CSV_PATH = os.path.join(DATA_DIR, 'feature_time_48k_2048_load_1.csv')
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -221,14 +225,56 @@ def normalize_signals_for_cnn(signals: np.ndarray) -> np.ndarray:
     return signals / max_abs
 
 
-def load_and_preprocess_cwru_1024(npz_path: str = NPZ_PATH, verbose: bool = True):
+def augment_vibration_signals(signals: np.ndarray, labels: np.ndarray, seed: int = RANDOM_SEED) -> tuple:
     """
-    Loads CWRU NPZ dataset (4600 samples, 1024 points each), applies block splitting,
+    Physically grounded data augmentation for 1D raw vibration signals:
+      1. Random circular phase shift (+/- 96 samples) to simulate arbitrary sampling start times.
+      2. Additive Gaussian noise (SNR 25-35 dB) to simulate real workshop sensor/electrical noise.
+      3. Subtle amplitude perturbations (0.94x - 1.06x) for load/gain variations.
+    Doubles training set diversity while preserving ground-truth fault harmonic physics.
+    """
+    rng = np.random.default_rng(seed)
+    n_samples, length = signals.shape
+    aug_signals = np.zeros_like(signals)
+
+    for i in range(n_samples):
+        sig = signals[i].copy()
+        # 1. Circular phase shift
+        shift = int(rng.integers(-96, 96))
+        sig = np.roll(sig, shift)
+        # 2. Amplitude scaling
+        scale = float(rng.uniform(0.94, 1.06))
+        sig = sig * scale
+        # 3. Additive Gaussian noise
+        std = float(np.std(sig))
+        noise_level = std * float(rng.uniform(0.015, 0.035))
+        noise = rng.normal(0, noise_level, size=length)
+        sig = sig + noise
+
+        aug_signals[i] = sig
+
+    combined_signals = np.vstack([signals, aug_signals])
+    combined_labels = np.concatenate([labels, labels])
+
+    shuffle_idx = rng.permutation(len(combined_signals))
+    return combined_signals[shuffle_idx], combined_labels[shuffle_idx]
+
+
+def load_and_preprocess_cwru_1024(npz_path: str = None, augment_train: bool = True, verbose: bool = True):
+    """
+    Loads CWRU dataset (4600 samples, 1024 points each), applies block splitting,
+    optionally generates augmented training signals for maximum generalization,
     extracts 1024-point classical features, fits scaler ONLY on train set, and prepares
     all artifacts.
     """
+    if npz_path is None:
+        npz_path = NPZ_PATH
+
     if not os.path.exists(npz_path):
-        raise FileNotFoundError(f"CWRU dataset not found at {npz_path}")
+        if os.path.exists(FALLBACK_NPZ):
+            npz_path = FALLBACK_NPZ
+        else:
+            raise FileNotFoundError(f"CWRU dataset not found at {npz_path}")
 
     d = np.load(npz_path)
     data = d['data']    # (4600, 32, 32)
@@ -301,6 +347,21 @@ def load_and_preprocess_cwru_1024(npz_path: str = NPZ_PATH, verbose: bool = True
     sig_val_norm   = normalize_signals_for_cnn(sig_val)
     sig_test_norm  = normalize_signals_for_cnn(sig_test)
 
+    # ── Training Data Augmentation (Generalization Enhancement) ──────────────
+    if augment_train:
+        if verbose:
+            print("Applying phase-shift, noise injection & scale augmentation to train split...")
+        sig_train_aug_raw, y_train_aug = augment_vibration_signals(sig_train, y_train, seed=RANDOM_SEED)
+        sig_train_aug_norm = normalize_signals_for_cnn(sig_train_aug_raw)
+        y_train_aug_enc = label_encoder.transform(y_train_aug)
+        if verbose:
+            print(f"  Augmented training set: {len(sig_train_aug_norm)} samples (2x expansion)")
+    else:
+        sig_train_aug_raw = sig_train
+        sig_train_aug_norm = sig_train_norm
+        y_train_aug = y_train
+        y_train_aug_enc = y_train_enc
+
     # ── Save Universal Artifacts ─────────────────────────────────────────────
     scaler_path = os.path.join(MODELS_DIR, 'scaler_cwru_1024_v1.joblib')
     scaler_pkl_path = os.path.join(MODELS_DIR, 'scaler.pkl')
@@ -362,6 +423,8 @@ def load_and_preprocess_cwru_1024(npz_path: str = NPZ_PATH, verbose: bool = True
         'y_val_labels': y_val,
         'y_test_labels': y_test,
         'sig_train': sig_train_norm,
+        'sig_train_aug': sig_train_aug_norm,
+        'y_train_aug': y_train_aug_enc,
         'sig_val': sig_val_norm,
         'sig_test': sig_test_norm,
         'raw_sig_train': sig_train,

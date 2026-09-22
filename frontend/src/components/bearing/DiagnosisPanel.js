@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -10,11 +10,22 @@ import {
   Sparkles,
   ArrowRight,
   TrendingUp,
-  Cpu
+  Cpu,
+  Gauge,
+  CalendarPlus,
+  Info
 } from 'lucide-react';
 import { StatusBadge } from '../StatusBadge';
+import { ISOSeverityGauge } from './ISOSeverityGauge';
 
-export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
+export function DiagnosisPanel({
+  diagnosisResult,
+  selectedMachine,
+  onReset,
+  onScheduleMaintenance
+}) {
+  const [selectedFeature, setSelectedFeature] = useState(null);
+
   if (!diagnosisResult) return null;
 
   const isHealthy = diagnosisResult.bearing_status === 'Healthy' || diagnosisResult.fault_type === 'Normal';
@@ -46,6 +57,35 @@ export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
     ? `${faultSizeInches}" (${diagnosisResult.fault_size_mm} mm)`
     : 'None (Baseline)';
 
+  const measuredRms = diagnosisResult.features?.rms ?? diagnosisResult.rms ?? 0.15;
+
+  const FEATURE_INFO = {
+    rms: {
+      name: 'Root Mean Square (RMS)',
+      desc: 'Reflects total continuous vibration power. Standard indicator for ISO 10816 machinery health.',
+      healthyRange: '< 0.15 g',
+      current: `${measuredRms} g`
+    },
+    kurtosis: {
+      name: 'Kurtosis (Impulsiveness)',
+      desc: 'Measures peakedness/tailedness of signal distribution. Gaussian baseline is ~3.0; values > 4.0 indicate sharp bearing impact shocks.',
+      healthyRange: '2.8 - 3.2',
+      current: `${diagnosisResult.features?.kurtosis ?? diagnosisResult.kurtosis ?? 'N/A'}`
+    },
+    crest_factor: {
+      name: 'Crest Factor (Peak / RMS)',
+      desc: 'Detects isolated transient spalling impacts before overall RMS vibration increases significantly.',
+      healthyRange: '3.0 - 4.5',
+      current: `${diagnosisResult.features?.crest_factor ?? diagnosisResult.crest_factor ?? 'N/A'}`
+    },
+    peak_to_peak: {
+      name: 'Peak-to-Peak Amplitude',
+      desc: 'Full excursion range between maximum positive and negative acceleration excursions.',
+      healthyRange: '< 0.80 g',
+      current: `${diagnosisResult.features?.peak_to_peak ?? diagnosisResult.peak_to_peak ?? 'N/A'} g`
+    }
+  };
+
   return (
     <div
       style={{
@@ -76,7 +116,7 @@ export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
         >
           {/* Main Status & Classification Details */}
           <div style={{ flex: '1 1 340px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
               <StatusBadge status={diagnosisResult.bearing_status} size="md" />
               <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                 {diagnosisResult.windows_analyzed} {diagnosisResult.windows_analyzed === 1 ? 'window analyzed' : 'windows evaluated'}
@@ -91,7 +131,7 @@ export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
             <h2
               style={{
                 fontFamily: 'var(--font-heading)',
-                fontSize: 26,
+                fontSize: 24,
                 fontWeight: 800,
                 letterSpacing: '-0.02em',
                 color: 'var(--text-primary)',
@@ -106,11 +146,10 @@ export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-                gap: 12,
-                marginTop: 18
+                gap: 10,
+                marginTop: 16
               }}
             >
-              {/* Component Location */}
               <div
                 style={{
                   padding: '10px 12px',
@@ -127,7 +166,6 @@ export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
                 </div>
               </div>
 
-              {/* Defect Diameter */}
               <div
                 style={{
                   padding: '10px 12px',
@@ -144,7 +182,6 @@ export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
                 </div>
               </div>
 
-              {/* Severity Level */}
               <div
                 style={{
                   padding: '10px 12px',
@@ -169,18 +206,18 @@ export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
               background: 'var(--bg-surface-raised)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-lg)',
-              padding: '18px 22px',
+              padding: '16px 20px',
               textAlign: 'right',
-              minWidth: 200,
+              minWidth: 190,
               boxShadow: 'var(--shadow-xs)'
             }}
           >
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-              Model Probability
+              Confidence Rating
             </div>
             <div
               style={{
-                fontSize: 32,
+                fontSize: 30,
                 fontWeight: 800,
                 color: 'var(--accent-primary)',
                 fontFamily: 'var(--font-mono)',
@@ -191,15 +228,83 @@ export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
               {confidencePercent}%
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-              Softmax Output Confidence
+              Softmax Probability
             </div>
           </div>
         </div>
 
-        {/* Actionable Maintenance Recommendation Box */}
+        {/* ── ISO 10816-3 Gauge Sub-Component ── */}
+        <div style={{ marginTop: 18 }}>
+          <ISOSeverityGauge rmsValue={measuredRms} unit="g" />
+        </div>
+
+        {/* ── Autonomous Model Fit Engine Insight Strip ── */}
         <div
           style={{
-            marginTop: 22,
+            marginTop: 14,
+            padding: '12px 16px',
+            background: 'var(--bg-surface-raised)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--accent-subtle)',
+                color: 'var(--accent-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <Cpu size={16} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', fontWeight: 700, textTransform: 'uppercase' }}>
+                  Autonomous Engine Fit
+                </span>
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontFamily: 'var(--font-mono)',
+                    padding: '1px 6px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--status-healthy-bg)',
+                    color: 'var(--status-healthy)',
+                    fontWeight: 700,
+                    border: '1px solid var(--status-healthy-border)'
+                  }}
+                >
+                  BEST FIT ACTIVE
+                </span>
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
+                {diagnosisResult.auto_fit_details?.selected_model_name || diagnosisResult.model_version || '1D Deep CNN'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', maxWidth: 480, lineHeight: 1.4 }}>
+            {diagnosisResult.auto_fit_details?.selection_rationale || 'The system autonomously evaluated raw telemetry dynamics and routed inference to the optimal best-fit architecture.'}
+          </div>
+        </div>
+
+
+        {/* ── Actionable Maintenance Recommendation Box & Work Order CTA ── */}
+        <div
+          style={{
+            marginTop: 16,
             padding: '16px 20px',
             background: 'var(--bg-surface-raised)',
             borderRadius: 'var(--radius-md)',
@@ -257,6 +362,33 @@ export function DiagnosisPanel({ diagnosisResult, selectedMachine, onReset }) {
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.6 }}>
               {diagnosisResult.recommendation}
             </p>
+
+            {/* Quick Work Order Creation Button (if fault detected) */}
+            {!isHealthy && onScheduleMaintenance && (
+              <div style={{ marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => onScheduleMaintenance({
+                    machineId: selectedMachine?.id,
+                    machineName: selectedMachine?.name || 'Monitored Spindle',
+                    task: `Bearing Overhaul: Inspect for ${diagnosisResult.fault_type} spalling (${faultSizeDisplay}). ${diagnosisResult.recommendation}`,
+                    priority: diagnosisResult.urgency === 'Immediate' ? 'High' : 'Medium'
+                  })}
+                  className="btn btn-outline"
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <CalendarPlus size={14} />
+                  <span>Dispatch Work Order to Scheduler</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

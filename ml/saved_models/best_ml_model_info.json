@@ -36,5 +36,5 @@
   "split_method": "block_split (leakage-safe)",
   "train_samples": 3220,
   "test_samples": 920,
-  "timestamp": "2026-08-21T14:26:48.942646"
+  "timestamp": "2026-09-05T10:49:16.660423"
 }

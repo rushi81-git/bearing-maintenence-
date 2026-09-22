@@ -1,0 +1,92 @@
+# Implementation Plan: Generalized Bearing Fault Model Retraining & Autonomous Auto-Fit Inference System
+
+## Goal Description
+1. Retrain and generalize the bearing fault prediction models using the provided CWRU dataset (`CWRU_dataset/raw/data/*.xlsx` and `CWRU_48k_load_1_CNN_data.npz` / `.xlsx`).
+2. Implement data augmentation (circular shift, Gaussian noise perturbation, amplitude scaling) and an upgraded 1D CNN architecture (multi-scale feature extraction, residual skip connections, batch normalization, and dropout) for robust, high-efficiency, generalized inference.
+3. Replace the manual model selection UI dropdown with an **Autonomous Model Selection Engine** where the system dynamically analyzes the input signal characteristics (SNR, crest factor, kurtosis, softmax entropy, model certainty) to determine and execute the best-fit model automatically.
+
+---
+
+## Proposed Changes
+
+### 1. Model Retraining & Generalization Pipeline
+#### [MODIFY] [preprocess.py](file:///c:/workshop-maintenance-system/ml/preprocessing/preprocess.py)
+- Support data ingestion from `CWRU_dataset/raw/data` (10 raw accelerometer files with 485k+ samples each) as well as the 1024-window benchmark (`CWRU_48k_load_1_CNN_data.npz` / `.xlsx`).
+- Add data augmentation routines for signal generalization:
+  - Random circular phase shift (simulating varying vibration sensor starting points).
+  - Additive Gaussian noise (simulating industrial plant electrical and background noise at varying SNRs).
+  - Mild amplitude scaling (0.9x – 1.1x).
+- Ensure canonical feature scaler and label encoders are fitted strictly on the leakage-safe training split.
+
+#### [MODIFY] [train_cnn.py](file:///c:/workshop-maintenance-system/ml/training/train_cnn.py)
+- Upgrade the 1D Deep CNN architecture to a Generalized Residual Multi-Scale 1D CNN:
+  - Large receptive field initial layer (kernel size 64) for low-frequency shaft harmonics.
+  - Residual skip connections with Batch Normalization and Spatial Dropout to prevent overfitting.
+  - Global Average Pooling + dense classification head with L2 regularization.
+- Train with early stopping, learning rate scheduling on plateau, and augmented batches.
+- Output benchmark evaluations, confusion matrix, and training curves.
+- Save best model checkpoints to `ml/saved_models/cnn_cwru_1024_v1.keras` and `cnn_model.keras`.
+
+#### [MODIFY] [train_ml.py](file:///c:/workshop-maintenance-system/ml/training/train_ml.py)
+- Retrain classical models (Random Forest, SVM, Gradient Boosting) on canonical 1024-sample features.
+- Calibrate probabilities and export evaluation artifacts.
+
+---
+
+### 2. Autonomous Model Selection Engine
+#### [MODIFY] [predict.py](file:///c:/workshop-maintenance-system/ml/inference/predict.py)
+- Implement `analyze_best_fit_model(signal, features, cnn_model, classical_model)`:
+  - Computes telemetry characteristics (kurtosis, crest factor, noise floor estimate).
+  - Evaluates candidate inferences: computes prediction probabilities and Shannon entropy.
+  - Autonomously selects the best-fit model (e.g. 1D Deep CNN for dynamic transient waveforms, classical feature-based model for specific low-frequency steady states, or calibrated consensus).
+  - Returns detailed auto-selection metadata: `selected_model`, `model_fit_reason`, `selection_confidence`, and `fit_metrics`.
+- Support `model_mode="auto"` as the standard default mode.
+
+#### [MODIFY] [ml_server.py](file:///c:/workshop-maintenance-system/ml/api/ml_server.py)
+- Update `PredictRequest` to accept `model_mode: Optional[str] = "auto"` (deprecating manual `use_classical_ml`).
+- Include `auto_fit_details` in `PredictResponse` (selected model name, reason, fitness metrics).
+
+---
+
+### 3. Backend Proxy & Route Updates
+#### [MODIFY] [server.js](file:///c:/workshop-maintenance-system/backend/server.js)
+- Update `/api/bearing/analyze` endpoint in Express backend to forward `model_mode: 'auto'` and relay the auto-selection diagnosis metadata.
+
+---
+
+### 4. Frontend UI Transformation: Autonomous Best-Fit Display
+#### [MODIFY] [SignalPreviewCard.js](file:///c:/workshop-maintenance-system/frontend/src/components/bearing/SignalPreviewCard.js)
+- Remove the manual `<select>` model dropdown (`Neural Inference Engine: 1D Deep CNN / Random Forest`).
+- Add an **Autonomous Intelligence Status Badge**:
+  - Displays: `[AUTO-FIT ENGINE ACTIVE]` with dynamic tooltip explaining that the system self-selects the optimal neural or tabular model based on signal dynamics.
+  - Shows real-time signal classification preview (e.g. "Transient Peak Density: Analyzed · Auto-Routing Ready").
+
+#### [MODIFY] [BearingAnalysis.js](file:///c:/workshop-maintenance-system/frontend/src/views/BearingAnalysis.js)
+- Remove `useClassicalML` state and pass `model_mode: 'auto'` to the API.
+
+#### [MODIFY] [DiagnosisPanel.js](file:///c:/workshop-maintenance-system/frontend/src/components/bearing/DiagnosisPanel.js) & [TechnicalAuditSection.js](file:///c:/workshop-maintenance-system/frontend/src/components/bearing/TechnicalAuditSection.js)
+- Display an **Auto-Fit Engine Decision Card**:
+  - Show which model the system autonomously selected and why (e.g. "Selected: 1D Deep CNN — High transient kurtosis detected; optimal spatial harmonic extraction").
+  - Display inference speed and certainty score.
+
+---
+
+## Verification Plan
+
+### Automated Tests & Retraining Validation
+1. **Run Preprocessing & Augmentation Validation**:
+   - `python ml/preprocessing/preprocess.py` -> verify data splits, shapes, and augmentation.
+2. **Execute Model Retraining**:
+   - `python ml/training/train_cnn.py` -> verify validation accuracy, confusion matrix, and model save.
+   - `python ml/training/train_ml.py` -> verify classical model updates.
+3. **Inference & Auto-Fit Engine Test**:
+   - `python -c "from ml.inference.predict import analyze_vibration_signal; ..."` -> test auto-selection across normal, ball, inner race, and outer race signals.
+4. **FastAPI Microservice Restart & Health Check**:
+   - Restart FastAPI on port 8000.
+   - Test `POST /predict` with sample signal and verify `auto_fit_details` response.
+
+### Manual Verification
+1. Open web application at `http://localhost:3000`.
+2. Navigate to **Bearing Analysis**.
+3. Verify that the manual model dropdown is replaced by the autonomous auto-fit engine badge.
+4. Upload or synthesize a vibration waveform, click **Execute Neural Diagnosis**, and verify that the system automatically analyzes, selects the best fit, and displays the diagnosis with the auto-selection rationale.

@@ -3,67 +3,62 @@ import { ThemeProvider } from './context/ThemeContext';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Toast } from './components/Toast';
-import { BearingAnalysis } from './views/BearingAnalysis';
-import { Overview } from './views/Overview';
-import { Machines } from './views/Machines';
-import { AnalysisHistory } from './views/AnalysisHistory';
+import { IndustrialDashboard } from './views/workflow/IndustrialDashboard';
 import { Maintenance } from './views/Maintenance';
-import { fetchMachines } from './services/api';
-
-const VIEW_TITLES = {
-  bearing: {
-    title: 'Bearing Vibration Analysis',
-    subtitle: 'Upload CSV signals from operating machines for AI-driven fault classification and maintenance recommendations'
-  },
-  overview: {
-    title: 'Fleet Overview',
-    subtitle: 'High-level status of monitored equipment, recent diagnoses, and model benchmarks'
-  },
-  machines: {
-    title: 'Workshop Machines',
-    subtitle: 'Manage monitored equipment profiles and operational telemetry parameters'
-  },
-  history: {
-    title: 'Analysis History',
-    subtitle: 'Audit log of all bearing vibration diagnoses with filterable search'
-  },
-  maintenance: {
-    title: 'Maintenance Scheduler',
-    subtitle: 'Create, track, and complete bearing inspection and replacement work orders'
-  }
-};
+import { fetchMachines, fetchSchedule } from './services/api';
 
 function AppContent() {
-  const [currentTab, setCurrentTab] = useState('bearing');
+  const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard' | 'schedule'
   const [machines, setMachines] = useState([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [toast, setToast] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [selectedMachineForDiagnosis, setSelectedMachineForDiagnosis] = useState(null);
 
-  // Load machines on mount
+  // Load machines
   const loadMachines = useCallback(async () => {
     try {
       const res = await fetchMachines();
-      if (res.success) setMachines(res.data || []);
+      if (res.success && res.data) {
+        setMachines(res.data);
+      }
+    } catch (_) {}
+  }, []);
+
+  // Load pending maintenance count for sidebar badge
+  const loadScheduleCount = useCallback(async () => {
+    try {
+      const res = await fetchSchedule();
+      if (res.success && res.data) {
+        const pending = res.data.filter(
+          (s) => (s.status || '').toLowerCase() === 'pending' || (s.status || '').toLowerCase() === 'in_progress'
+        ).length;
+        setPendingCount(pending);
+      }
     } catch (_) {}
   }, []);
 
   useEffect(() => {
     loadMachines();
-  }, [loadMachines]);
+    loadScheduleCount();
+  }, [loadMachines, loadScheduleCount]);
 
-  // Toast handler with type support
+  // Toast notification helper
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type });
   }, []);
 
-  // Navigate to bearing analysis with pre-selected machine
-  const handleDiagnoseMachine = useCallback((machineId) => {
-    setSelectedMachineForDiagnosis(machineId);
-    setCurrentTab('bearing');
-  }, []);
+  const metaTitles = {
+    dashboard: {
+      title: 'Workshop Machinery Diagnostics',
+      subtitle: 'Single-Page 4-Step Sequential Inspection Pipeline (ISO 10816-3 & CWRU Neural Analysis)'
+    },
+    schedule: {
+      title: 'Maintenance Schedule & Work Orders',
+      subtitle: 'Track dispatched inspection, overhaul, and bearing replacement tasks'
+    }
+  };
 
-  const meta = VIEW_TITLES[currentTab] || VIEW_TITLES.bearing;
+  const currentMeta = metaTitles[viewMode] || metaTitles.dashboard;
 
   return (
     <div
@@ -75,63 +70,48 @@ function AppContent() {
         color: 'var(--text-primary)'
       }}
     >
-      {/* Sidebar */}
+      {/* 2-Option Left Navigation Bar */}
       <Sidebar
-        currentTab={currentTab}
-        setTab={(tab) => {
-          setCurrentTab(tab);
-          setSelectedMachineForDiagnosis(null);
-        }}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
         mobileOpen={mobileOpen}
         closeMobile={() => setMobileOpen(false)}
+        pendingCount={pendingCount}
       />
 
-      {/* Main Content Area */}
+      {/* Main Content Workspace */}
       <main
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '28px 32px',
+          padding: '24px 32px',
           display: 'flex',
           flexDirection: 'column',
-          minWidth: 0
+          minWidth: 0,
+          gap: 20
         }}
       >
         <Header
-          title={meta.title}
-          subtitle={meta.subtitle}
+          title={currentMeta.title}
+          subtitle={currentMeta.subtitle}
           onOpenMobile={() => setMobileOpen(true)}
         />
 
-        {/* View Routing */}
-        {currentTab === 'bearing' && (
-          <BearingAnalysis
+        {/* View Mode: Dashboard (Strict Sequential In-Page 4-Step Pipeline) */}
+        {viewMode === 'dashboard' && (
+          <IndustrialDashboard
             machines={machines}
-            showToast={showToast}
-            preSelectedMachineId={selectedMachineForDiagnosis}
-          />
-        )}
-        {currentTab === 'overview' && (
-          <Overview
-            machines={machines}
-            onNavigate={setCurrentTab}
-          />
-        )}
-        {currentTab === 'machines' && (
-          <Machines
-            machines={machines}
-            onRefresh={loadMachines}
-            showToast={showToast}
-            onDiagnoseMachine={handleDiagnoseMachine}
-          />
-        )}
-        {currentTab === 'history' && (
-          <AnalysisHistory
-            machines={machines}
+            onRefreshMachines={loadMachines}
+            onSwitchToSchedule={() => {
+              loadScheduleCount();
+              setViewMode('schedule');
+            }}
             showToast={showToast}
           />
         )}
-        {currentTab === 'maintenance' && (
+
+        {/* View Mode: Maintenance Schedule */}
+        {viewMode === 'schedule' && (
           <Maintenance
             machines={machines}
             showToast={showToast}

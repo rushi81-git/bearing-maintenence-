@@ -74,7 +74,9 @@ export async function analyzeBearingSignal({
   signal_unit = 'g',
   source_type = 'csv',
   source_filename = 'vibration.csv',
-  use_classical_ml = false
+  model_mode = 'auto',
+  use_classical_ml = false,
+  bearing_location = 'Drive End (DE)'
 }) {
   const res = await fetch(`${API_BASE}/bearing-analysis`, {
     method: 'POST',
@@ -86,7 +88,9 @@ export async function analyzeBearingSignal({
       signal_unit,
       source_type,
       source_filename,
-      use_classical_ml
+      model_mode,
+      use_classical_ml,
+      bearing_location
     })
   });
   return res.json();

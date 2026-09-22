@@ -55,7 +55,8 @@ class PredictRequest(BaseModel):
     sampling_rate_hz: Optional[int] = Field(48000, description="Accelerometer sampling rate in Hz")
     signal_unit: Optional[str] = Field("g", description="Vibration unit (default: g acceleration)")
     source_type: Optional[str] = Field("csv", description="Input source ('csv', 'sensor_stream', 'demo')")
-    use_classical_ml: Optional[bool] = Field(False, description="Use Random Forest classical ML instead of 1D CNN")
+    model_mode: Optional[str] = Field("auto", description="Model selection mode: 'auto' (autonomous best-fit), 'cnn', or 'classical'")
+    use_classical_ml: Optional[bool] = Field(False, description="Legacy fallback flag")
 
     @validator('signal')
     def validate_signal_array(cls, v):
@@ -87,6 +88,7 @@ class PredictResponse(BaseModel):
     prediction_distribution: List[Dict[str, Any]]
     window_predictions: List[Dict[str, Any]]
     model_version: str
+    auto_fit_details: Optional[Dict[str, Any]] = None
     recommendation: str
     urgency: str
     check_interval: str
@@ -132,6 +134,7 @@ def predict_bearing_condition(req: PredictRequest):
             sampling_rate_hz=req.sampling_rate_hz or 48000,
             signal_unit=req.signal_unit or "g",
             source_type=req.source_type or "csv",
+            model_mode=req.model_mode or "auto",
             use_classical_ml=bool(req.use_classical_ml)
         )
         elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)

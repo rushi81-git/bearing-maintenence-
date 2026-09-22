@@ -66,40 +66,70 @@ from sklearn.metrics import (
 
 
 def build_1d_cnn(input_length=1024, n_classes=10):
-    """Builds a lightweight, high-generalization 1D CNN for vibration analysis."""
+    """
+    Builds a Generalized Multi-Scale Residual 1D CNN for vibration analysis.
+    Key architectural advantages:
+      - Multi-scale stem: parallel broad (k=64) and transient (k=16) 1D convolutions.
+      - Residual shortcut blocks with Batch Normalization for smooth gradient flow.
+      - SpatialDropout1D to eliminate reliance on specific phase points or noise artifacts.
+      - GlobalAveragePooling1D for translational invariance and low parameter count.
+      - L2 weight regularization and dense classification head.
+    """
     inputs = layers.Input(shape=(input_length,))
     x = layers.Reshape((input_length, 1))(inputs)
 
-    # Block 1: Low-frequency broad waveform features
-    x = layers.Conv1D(filters=32, kernel_size=64, padding='same', use_bias=False,
-                      kernel_regularizer=regularizers.l2(1e-4))(x)
-    x = layers.BatchNormalization()(x)
+    # ── Multi-Scale Stem ───────────────────────────────────────────
+    path_a = layers.Conv1D(filters=32, kernel_size=64, padding='same', use_bias=False,
+                           kernel_regularizer=regularizers.l2(1e-4))(x)
+    path_a = layers.BatchNormalization()(path_a)
+    path_a = layers.ReLU()(path_a)
+
+    path_b = layers.Conv1D(filters=32, kernel_size=16, padding='same', use_bias=False,
+                           kernel_regularizer=regularizers.l2(1e-4))(x)
+    path_b = layers.BatchNormalization()(path_b)
+    path_b = layers.ReLU()(path_b)
+
+    x = layers.Concatenate()([path_a, path_b])
+    x = layers.MaxPooling1D(pool_size=4)(x)
+    x = layers.SpatialDropout1D(0.1)(x)
+
+    # ── Residual Block 1 (Mid-Frequency Dynamics) ───────────────────
+    residual = x
+    res_conv = layers.Conv1D(filters=64, kernel_size=32, padding='same', use_bias=False,
+                             kernel_regularizer=regularizers.l2(1e-4))(x)
+    res_conv = layers.BatchNormalization()(res_conv)
+    res_conv = layers.ReLU()(res_conv)
+    res_conv = layers.Conv1D(filters=64, kernel_size=32, padding='same', use_bias=False,
+                             kernel_regularizer=regularizers.l2(1e-4))(res_conv)
+    res_conv = layers.BatchNormalization()(res_conv)
+    x = layers.Add()([residual, res_conv])
+    x = layers.ReLU()(x)
+    x = layers.MaxPooling1D(pool_size=4)(x)
+    x = layers.SpatialDropout1D(0.15)(x)
+
+    # ── Residual Block 2 (Localized Defect Resonance) ───────────────
+    shortcut = layers.Conv1D(filters=128, kernel_size=1, padding='same', use_bias=False)(x)
+    shortcut = layers.BatchNormalization()(shortcut)
+
+    res2 = layers.Conv1D(filters=128, kernel_size=16, padding='same', use_bias=False,
+                         kernel_regularizer=regularizers.l2(1e-4))(x)
+    res2 = layers.BatchNormalization()(res2)
+    res2 = layers.ReLU()(res2)
+    res2 = layers.Conv1D(filters=128, kernel_size=16, padding='same', use_bias=False,
+                         kernel_regularizer=regularizers.l2(1e-4))(res2)
+    res2 = layers.BatchNormalization()(res2)
+    x = layers.Add()([shortcut, res2])
     x = layers.ReLU()(x)
     x = layers.MaxPooling1D(pool_size=4)(x)
 
-    # Block 2: Mid-frequency transient features
-    x = layers.Conv1D(filters=64, kernel_size=32, padding='same', use_bias=False,
-                      kernel_regularizer=regularizers.l2(1e-4))(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.MaxPooling1D(pool_size=4)(x)
-
-    # Block 3: High-frequency impact & resonance features
-    x = layers.Conv1D(filters=128, kernel_size=16, padding='same', use_bias=False,
-                      kernel_regularizer=regularizers.l2(1e-4))(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.MaxPooling1D(pool_size=4)(x)
-
-    # Global Average Pooling (prevents parameter explosion and overfitting)
+    # ── Global Pooling & Classification Head ────────────────────────
     x = layers.GlobalAveragePooling1D()(x)
-
-    # Dense Classification Head
     x = layers.Dense(128, activation='relu', kernel_regularizer=regularizers.l2(1e-4))(x)
+    x = layers.BatchNormalization()(x)
     x = layers.Dropout(0.30)(x)
     outputs = layers.Dense(n_classes, activation='softmax')(x)
 
-    model = keras.Model(inputs=inputs, outputs=outputs, name="1D_Vibration_CNN")
+    model = keras.Model(inputs=inputs, outputs=outputs, name="Generalized_1D_Vibration_CNN")
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=1e-3),
         loss='sparse_categorical_crossentropy',
@@ -117,17 +147,16 @@ def plot_cnn_training_curves(history_df, save_path):
     # Accuracy
     ax1.plot(epochs, history_df['accuracy'], 'b-', label='Train Accuracy', lw=2)
     ax1.plot(epochs, history_df['val_accuracy'], 'g-', label='Val Accuracy', lw=2)
-    ax1.set_title('1D CNN Accuracy Curves (Leakage-Safe Split)')
+    ax1.set_title('Generalized 1D CNN Accuracy Curves')
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Accuracy')
     ax1.grid(True, alpha=0.3)
     ax1.legend(loc='lower right')
 
     # Loss
-    ax1.set_ylim([0.7, 1.02])
     ax2.plot(epochs, history_df['loss'], 'b-', label='Train Loss', lw=2)
     ax2.plot(epochs, history_df['val_loss'], 'r-', label='Val Loss', lw=2)
-    ax2.set_title('1D CNN Loss Curves')
+    ax2.set_title('Generalized 1D CNN Loss Curves')
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('Loss')
     ax2.grid(True, alpha=0.3)
@@ -141,15 +170,18 @@ def plot_cnn_training_curves(history_df, save_path):
 def train_and_evaluate_cnn():
     """Runs 1D CNN training, generates validation curves, and performs held-out test evaluation."""
     print("=" * 70)
-    print("STARTING 1D CNN TRAINING PIPELINE (1024 RAW SAMPLES)")
+    print("STARTING GENERALIZED 1D CNN TRAINING PIPELINE (1024 RAW SAMPLES)")
     print("=" * 70)
 
-    data = load_and_preprocess_cwru_1024(verbose=False)
-    sig_train, y_train = data['sig_train'], data['y_train']
+    data = load_and_preprocess_cwru_1024(augment_train=True, verbose=True)
+    sig_train = data.get('sig_train_aug', data['sig_train'])
+    y_train   = data.get('y_train_aug', data['y_train'])
     sig_val, y_val     = data['sig_val'], data['y_val']
     sig_test, y_test   = data['sig_test'], data['y_test']
     label_encoder      = data['label_encoder']
     class_names        = list(label_encoder.classes_)
+
+    print(f"Training on {len(sig_train)} augmented signals, validating on {len(sig_val)}, testing on {len(sig_test)}")
 
     model = build_1d_cnn(input_length=1024, n_classes=len(class_names))
     model.summary()
@@ -167,7 +199,7 @@ def train_and_evaluate_cnn():
     history = model.fit(
         sig_train, y_train,
         validation_data=(sig_val, y_val),
-        epochs=50,
+        epochs=40,
         batch_size=64,
         callbacks=callbacks,
         verbose=1

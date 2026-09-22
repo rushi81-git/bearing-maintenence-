@@ -1,22 +1,29 @@
 import React from 'react';
-import {
-  Activity,
-  LayoutDashboard,
-  Cpu,
-  History,
-  Wrench,
-  Sparkles
-} from 'lucide-react';
+import { LayoutDashboard, CalendarClock, ShieldCheck } from 'lucide-react';
 
-const NAV_ITEMS = [
-  { id: 'bearing', label: 'Bearing Analysis', icon: Activity, hero: true },
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'machines', label: 'Machines', icon: Cpu },
-  { id: 'history', label: 'Analysis History', icon: History },
-  { id: 'maintenance', label: 'Maintenance', icon: Wrench },
-];
+export function Sidebar({
+  viewMode,
+  setViewMode,
+  mobileOpen,
+  closeMobile,
+  pendingCount = 0
+}) {
+  const navItems = [
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      sub: '4-Step Sequential Diagnostic Pipeline',
+      icon: LayoutDashboard
+    },
+    {
+      id: 'schedule',
+      label: 'Maintenance Schedule',
+      sub: 'Dispatched Work Orders & Tasks',
+      icon: CalendarClock,
+      badge: pendingCount > 0 ? pendingCount : null
+    }
+  ];
 
-export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
   return (
     <>
       {/* Mobile Backdrop */}
@@ -26,7 +33,7 @@ export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.6)',
+            background: 'rgba(0,0,0,0.65)',
             zIndex: 40,
             backdropFilter: 'blur(4px)'
           }}
@@ -35,7 +42,7 @@ export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
 
       <aside
         style={{
-          width: 250,
+          width: 280,
           background: 'var(--bg-surface)',
           borderRight: '1px solid var(--border-subtle)',
           display: 'flex',
@@ -45,70 +52,95 @@ export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
           height: '100vh',
           zIndex: 50,
           flexShrink: 0,
-          transition: 'transform 0.25s ease'
+          boxShadow: '2px 0 12px rgba(0,0,0,0.08)'
         }}
       >
-        {/* App Branding */}
-        <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span
+        {/* App Industrial Branding */}
+        <div style={{ padding: '24px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
               style={{
-                background: 'var(--accent-subtle)',
-                color: 'var(--accent-primary)',
-                padding: '6px',
-                borderRadius: 'var(--radius-md)',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                color: '#ffffff',
+                width: 42,
+                height: 42,
+                borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.35)',
+                flexShrink: 0
               }}
             >
-              <Sparkles size={18} />
-            </span>
-            <div>
-              <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, lineHeight: 1.2 }}>
-                Bearing AI Diagnostics
-              </h1>
-              <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                v3.0 · CWRU Offline Trained
-              </span>
+              <ShieldCheck size={24} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontSize: 16,
+                  fontWeight: 800,
+                  letterSpacing: '-0.02em',
+                  color: 'var(--text-primary)',
+                  lineHeight: 1.2
+                }}
+              >
+                Smart Workshop
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  marginTop: 2
+                }}
+              >
+                Induction Motor Monitor
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Navigation Links */}
-        <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {/* Navigation Menu (Exactly 2 Options: Dashboard & Maintenance Schedule) */}
+        <nav style={{ flex: 1, padding: '24px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div
             style={{
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               color: 'var(--text-muted)',
-              padding: '6px 12px 4px',
+              padding: '4px 12px',
               fontFamily: 'var(--font-mono)'
             }}
           >
-            Diagnostics
+            System Navigation
           </div>
 
-          {NAV_ITEMS.map(({ id, label, icon: Icon, hero }) => {
-            const isActive = currentTab === id;
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = viewMode === item.id;
+
             return (
               <button
-                key={id}
+                key={item.id}
+                type="button"
+                id={`nav-${item.id}`}
                 onClick={() => {
-                  setTab(id);
+                  setViewMode(item.id);
                   if (closeMobile) closeMobile();
                 }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 12,
+                  gap: 14,
                   width: '100%',
-                  padding: hero ? '12px 14px' : '10px 14px',
+                  padding: '14px 16px',
                   borderRadius: 'var(--radius-md)',
                   border: isActive
-                    ? '1px solid var(--accent-border)'
+                    ? '1.5px solid var(--accent-primary)'
                     : '1px solid transparent',
                   background: isActive
                     ? 'var(--accent-subtle)'
@@ -116,36 +148,69 @@ export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
                   color: isActive
                     ? 'var(--accent-primary)'
                     : 'var(--text-secondary)',
-                  fontSize: 13,
-                  fontWeight: isActive ? 600 : 500,
                   cursor: 'pointer',
                   textAlign: 'left',
-                  transition: 'all 0.15s ease'
+                  transition: 'all 0.18s ease',
+                  position: 'relative'
                 }}
               >
-                <Icon
-                  size={16}
+                <div
                   style={{
-                    color: isActive ? 'var(--accent-primary)' : 'var(--text-muted)',
-                    flexShrink: 0
+                    width: 36,
+                    height: 36,
+                    borderRadius: '8px',
+                    background: isActive ? 'var(--accent-primary)' : 'var(--bg-surface-raised)',
+                    color: isActive ? '#ffffff' : 'var(--text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.18s ease'
                   }}
-                />
-                <span style={{ flex: 1 }}>{label}</span>
-                {hero && (
+                >
+                  <Icon size={20} />
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: isActive ? 700 : 600,
+                      color: isActive ? 'var(--text-primary)' : 'inherit',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {item.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      marginTop: 2
+                    }}
+                  >
+                    {item.sub}
+                  </div>
+                </div>
+
+                {item.badge && (
                   <span
                     style={{
-                      fontSize: 9,
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-full)',
+                      background: 'var(--status-moderate)',
+                      color: '#ffffff',
+                      fontSize: 11,
                       fontWeight: 700,
-                      textTransform: 'uppercase',
-                      padding: '2px 6px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: isActive ? 'var(--accent-primary)' : 'var(--bg-surface-raised)',
-                      color: isActive ? '#000000' : 'var(--text-muted)',
-                      letterSpacing: '0.04em',
                       fontFamily: 'var(--font-mono)'
                     }}
                   >
-                    AI
+                    {item.badge}
                   </span>
                 )}
               </button>
@@ -153,7 +218,7 @@ export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
           })}
         </nav>
 
-        {/* Footer info */}
+        {/* Industrial System Telemetry Footer */}
         <div
           style={{
             padding: '16px 20px',
@@ -161,14 +226,17 @@ export function Sidebar({ currentTab, setTab, mobileOpen, closeMobile }) {
             fontSize: 11,
             color: 'var(--text-muted)',
             fontFamily: 'var(--font-mono)',
-            lineHeight: 1.6
+            lineHeight: 1.6,
+            background: 'var(--bg-surface-raised)'
           }}
         >
-          <div>ADCET Mech Engg Minor Project</div>
-          <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>CWRU 1024-Window Model</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--status-healthy)' }} />
-            <span style={{ fontSize: 10 }}>Inference Engine Ready</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>ISO 10816-3 & CWRU</span>
+            <span style={{ fontSize: 10, padding: '2px 6px', background: 'var(--bg-base)', borderRadius: 4 }}>v3.4</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--status-healthy)', display: 'inline-block' }} />
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Dual-Bearing DE/FE Engine Ready</span>
           </div>
         </div>
       </aside>

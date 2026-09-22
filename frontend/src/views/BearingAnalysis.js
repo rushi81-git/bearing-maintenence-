@@ -13,13 +13,18 @@ import { computeFFT } from '../utils/fft';
 import { analyzeBearingSignal, fetchDemoSamples } from '../services/api';
 import { RotateCcw, Activity, FileSpreadsheet } from 'lucide-react';
 
-export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId = null }) {
+export function BearingAnalysis({
+  machines = [],
+  showToast,
+  preSelectedMachineId = null,
+  onScheduleMaintenance = null
+}) {
   // Machine Selection
   const [selectedMachineId, setSelectedMachineId] = useState(preSelectedMachineId || (machines[0]?.id || ''));
 
   // Signal State
   const [sourceFilename, setSourceFilename] = useState('');
-  const [sourceType, setSourceType] = useState('csv'); // 'csv' | 'demo'
+  const [sourceType, setSourceType] = useState('csv'); // 'csv' | 'demo' | 'simulated'
   const [parsedCsv, setParsedCsv] = useState(null);
   const [selectedColumnIndex, setSelectedColumnIndex] = useState(0);
   const [activeSignal, setActiveSignal] = useState(null);
@@ -32,7 +37,6 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
 
   // Workflow State & Stepper
   const [currentStep, setCurrentStep] = useState(1);
-  const [useClassicalML, setUseClassicalML] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [pipelineStepIndex, setPipelineStepIndex] = useState(0);
   const [diagnosisResult, setDiagnosisResult] = useState(null);
@@ -82,10 +86,17 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
         setDiagnosisResult(null);
         setCurrentStep(2); // Progress to preview step
 
-        showToast(
-          `Successfully loaded ${parsed.defaultColumn.sampleCount.toLocaleString()} samples from ${filename}`,
-          'success'
-        );
+        if (parsed.hasMultiColumnWarning) {
+          showToast(
+            `Multi-column report detected — flattened ${parsed.defaultColumn.sampleCount.toLocaleString()} data points from ${filename}. Select the AUTO-CONCAT stream or individual columns below.`,
+            'info'
+          );
+        } else {
+          showToast(
+            `Successfully loaded ${parsed.defaultColumn.sampleCount.toLocaleString()} samples from ${filename}`,
+            'success'
+          );
+        }
       } catch (err) {
         showToast(err.message || 'Failed to parse CSV file', 'error');
       }
@@ -95,17 +106,25 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
   }, [showToast]);
 
   // Handle Column selection change if CSV contains multiple channels
+  // colIdx === -1 means the auto-concatenated multi-column stream
   const handleColumnChange = useCallback((colIdx) => {
     setSelectedColumnIndex(colIdx);
     if (parsedCsv) {
+      // Find by exact columnIndex (supports -1 sentinel for concat column)
       const col = parsedCsv.columns.find(c => c.columnIndex === colIdx);
       if (col) {
         setActiveSignal(col.data);
         setDiagnosisResult(null);
-        setCurrentStep(2);
+        setCurrentStep(col.sampleCount >= 1024 ? 2 : 1);
+        if (col.isConcatenated) {
+          showToast(
+            `Using flattened multi-column stream (${col.sampleCount.toLocaleString()} points). Signal represents concatenated numeric measurements, not raw time-domain data.`,
+            'info'
+          );
+        }
       }
     }
-  }, [parsedCsv]);
+  }, [parsedCsv, showToast]);
 
   // Load a curated CWRU Demo Sample
   const handleLoadDemo = useCallback((faultKey) => {
@@ -132,6 +151,20 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
     showToast(`Loaded CWRU Demonstration Sample (${faultKey})`, 'info');
   }, [demoSamplesCache, showToast]);
 
+  // Handle Kinematic Signal Synthesis
+  const handleSynthesizeSignal = useCallback((simData) => {
+    setParsedCsv(null);
+    setActiveSignal(simData.signal);
+    setSamplingRateHz(simData.samplingRateHz || 48000);
+    setSignalUnit(simData.signalUnit || 'g');
+    setSourceFilename(simData.filename);
+    setSourceType('simulated');
+    setDiagnosisResult(null);
+    setCurrentStep(2); // Progress to preview
+
+    showToast(`Kinematic synthesis generated: ${simData.faultKey} (${simData.meta.rpm} RPM)`, 'success');
+  }, [showToast]);
+
   // Clear current signal
   const handleClearSignal = useCallback(() => {
     setParsedCsv(null);
@@ -153,7 +186,7 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
     setPipelineStepIndex(0);
     setDiagnosisResult(null);
 
-    // Realistic progressive pipeline timer
+    // Progressive pipeline timer
     const stepInterval = setInterval(() => {
       setPipelineStepIndex(prev => {
         if (prev < PIPELINE_STEPS.length - 1) return prev + 1;
@@ -169,7 +202,7 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
         signal_unit: signalUnit,
         source_type: sourceType,
         source_filename: sourceFilename,
-        use_classical_ml: useClassicalML
+        model_mode: 'auto'
       });
 
       clearInterval(stepInterval);
@@ -196,7 +229,6 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }} className="animate-fade-in">
-      
       {/* ── Top Stepper ── */}
       <BearingStepper
         currentStep={currentStep}
@@ -226,7 +258,7 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
             />
           </div>
 
-          {/* CSV File Drag & Drop Ingestion Card */}
+          {/* Vibration Ingestion Card with Mode Switcher & Synthesizer */}
           <SignalUploadCard
             sourceFilename={sourceFilename}
             sourceType={sourceType}
@@ -241,6 +273,7 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
             onFileUpload={handleFileUpload}
             onClearSignal={handleClearSignal}
             onOpenDemoDrawer={() => setIsDemoDrawerOpen(true)}
+            onSynthesizeSignal={handleSynthesizeSignal}
           />
         </div>
 
@@ -252,7 +285,7 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
             <ProcessingPipeline currentStepIndex={pipelineStepIndex} />
           )}
 
-          {/* Signal Telemetry Preview Card (Waveform + FFT + CTA) */}
+          {/* Signal Telemetry Preview Card (Oscilloscope + FFT + Sonification + CTA) */}
           {!analyzing && (
             <SignalPreviewCard
               signal={activeSignal}
@@ -261,8 +294,6 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
               sourceFilename={sourceFilename}
               sourceType={sourceType}
               spectrumData={spectrumData}
-              useClassicalML={useClassicalML}
-              onModelChange={setUseClassicalML}
               onAnalyze={handleAnalyze}
               analyzing={analyzing}
               onOpenDemoDrawer={() => setIsDemoDrawerOpen(true)}
@@ -272,14 +303,15 @@ export function BearingAnalysis({ machines = [], showToast, preSelectedMachineId
           {/* Post-Inference Diagnosis & Recommendations */}
           {!analyzing && diagnosisResult && (
             <>
-              {/* Strong Hero Diagnosis Panel */}
+              {/* Strong Hero Diagnosis Panel with ISO Gauge */}
               <DiagnosisPanel
                 diagnosisResult={diagnosisResult}
                 selectedMachine={selectedMachine}
                 onReset={handleClearSignal}
+                onScheduleMaintenance={onScheduleMaintenance}
               />
 
-              {/* Multi-Window Continuity Aggregation (if multi-window) */}
+              {/* Multi-Window Continuity Aggregation & Timeline Scrubber */}
               <MultiWindowDistribution diagnosisResult={diagnosisResult} />
 
               {/* Expandable Technical Audit Section */}

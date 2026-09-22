@@ -38,11 +38,14 @@ CREATE TABLE IF NOT EXISTS machine_parameters (
 CREATE TABLE IF NOT EXISTS maintenance_schedule (
   id                       INT AUTO_INCREMENT PRIMARY KEY,
   machine_id               INT NOT NULL,
+  task_type                VARCHAR(100) DEFAULT 'General Maintenance',
   scheduled_date           DATE,
+  due_date                 DATE,
   estimated_duration_hours DECIMAL(4,1) DEFAULT 2.0,
   task_description         TEXT,
-  priority                 ENUM('Low','Medium','High') NOT NULL DEFAULT 'Low',
-  status                   ENUM('Pending','In Progress','Completed','Cancelled') NOT NULL DEFAULT 'Pending',
+  notes                    TEXT,
+  priority                 ENUM('Low','Medium','High','Critical') NOT NULL DEFAULT 'Medium',
+  status                   ENUM('pending','in_progress','completed','overdue','Pending','In Progress','Completed','Cancelled') NOT NULL DEFAULT 'pending',
   created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
 );
