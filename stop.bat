@@ -5,6 +5,12 @@ echo         STOPPING WORKSHOP MAINTENANCE SERVERS
 echo ================================================================
 echo.
 
+echo [*] Stopping processes on port 8000 (ML API)...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') do (
+    taskkill /F /PID %%a >nul 2>&1
+    echo     Terminated process PID %%a
+)
+
 echo [*] Stopping processes on port 5000 (Backend)...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5000 ^| findstr LISTENING') do (
     taskkill /F /PID %%a >nul 2>&1
@@ -19,7 +25,7 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING') 
 
 echo.
 echo ================================================================
-echo  Servers on port 5000 and 3000 have been stopped.
+echo  Servers on port 8000, 5000 and 3000 have been stopped.
 echo ================================================================
 echo.
 pause

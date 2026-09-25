@@ -1,5 +1,5 @@
 /**
- * Robust CSV Signal Parser
+ * Robust CSV & Excel Signal Parser
  * Handles:
  *  - Single column or multiple columns
  *  - Headers vs. Headerless
@@ -8,7 +8,10 @@
  *  - Multi-column machine condition reports (row-based measurements)
  *  - Cells containing parenthetical qualifiers like "0.502(29)" → 0.502
  *  - Cells with dashes "-" or "illegible" → skip
+ *  - Excel .xlsx/.xls files (via SheetJS)
  */
+import * as XLSX from 'xlsx';
+
 
 /**
  * Try to parse a messy cell value from machine condition monitoring CSVs.
@@ -222,3 +225,30 @@ export function parseVibrationCSV(text) {
 
 export const parseVibrationCsv = parseVibrationCSV;
 
+/**
+ * Parse an Excel (.xlsx / .xls) file ArrayBuffer into the same shape as
+ * parseVibrationCSV.  Reads the first worksheet, converts it to CSV, then
+ * delegates to parseVibrationCSV.
+ *
+ * @param {ArrayBuffer} buffer  - result of file.arrayBuffer()
+ * @param {string}      filename - original filename (for error messages)
+ * @returns {object} Same structure as parseVibrationCSV
+ */
+export function parseVibrationExcel(buffer, filename = 'data.xlsx') {
+  try {
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) {
+      throw new Error(`No sheets found in the Excel file "${filename}".`);
+    }
+    const sheet = workbook.Sheets[firstSheetName];
+    // Convert the sheet to a CSV string, then reuse the existing CSV parser
+    const csvText = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+    if (!csvText || csvText.trim().length === 0) {
+      throw new Error(`The first sheet "${firstSheetName}" appears to be empty.`);
+    }
+    return parseVibrationCSV(csvText);
+  } catch (err) {
+    throw new Error(`Excel parse error (${filename}): ${err.message}`);
+  }
+}

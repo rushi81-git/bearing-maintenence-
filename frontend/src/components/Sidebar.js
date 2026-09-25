@@ -60,15 +60,16 @@ export function Sidebar({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
               style={{
-                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                color: '#ffffff',
+                background: 'var(--text-primary)',
+                color: 'var(--bg-surface)',
                 width: 42,
                 height: 42,
-                borderRadius: '10px',
+                borderRadius: 0,
+                border: '2px solid var(--card-border-color)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.35)',
+                boxShadow: 'var(--shadow-xs)',
                 flexShrink: 0
               }}
             >
@@ -138,29 +139,31 @@ export function Sidebar({
                   gap: 14,
                   width: '100%',
                   padding: '14px 16px',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 0,
                   border: isActive
-                    ? '1.5px solid var(--accent-primary)'
-                    : '1px solid transparent',
+                    ? '2px solid var(--card-border-color)'
+                    : '2px solid transparent',
                   background: isActive
-                    ? 'var(--accent-subtle)'
+                    ? 'var(--bg-surface-raised)'
                     : 'transparent',
                   color: isActive
-                    ? 'var(--accent-primary)'
+                    ? 'var(--text-primary)'
                     : 'var(--text-secondary)',
                   cursor: 'pointer',
                   textAlign: 'left',
                   transition: 'all 0.18s ease',
-                  position: 'relative'
+                  position: 'relative',
+                  boxShadow: isActive ? 'var(--shadow-xs)' : 'none'
                 }}
               >
                 <div
                   style={{
                     width: 36,
                     height: 36,
-                    borderRadius: '8px',
-                    background: isActive ? 'var(--accent-primary)' : 'var(--bg-surface-raised)',
-                    color: isActive ? '#ffffff' : 'var(--text-muted)',
+                    borderRadius: 0,
+                    border: '1px solid var(--card-border-color)',
+                    background: isActive ? 'var(--text-primary)' : 'var(--bg-surface)',
+                    color: isActive ? 'var(--bg-surface)' : 'var(--text-muted)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

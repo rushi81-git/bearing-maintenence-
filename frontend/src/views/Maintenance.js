@@ -104,9 +104,12 @@ export function Maintenance({ machines, showToast, prefillData = null, onClearPr
     } catch (err) { showToast(err.message, 'error'); }
   };
 
+  const pendingTasks = schedule.filter(s => (s.status || '').toLowerCase() !== 'completed');
+  const completedTasks = schedule.filter(s => (s.status || '').toLowerCase() === 'completed');
+
   const pendingCount = schedule.filter(s => (s.status || '').toLowerCase() === 'pending').length;
   const overdueCount = schedule.filter(s => (s.status || '').toLowerCase() === 'overdue').length;
-  const completedCount = schedule.filter(s => (s.status || '').toLowerCase() === 'completed').length;
+  const completedCount = completedTasks.length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }} className="animate-fade-in">
@@ -118,7 +121,7 @@ export function Maintenance({ machines, showToast, prefillData = null, onClearPr
             // MAINTENANCE SCHEDULER
           </span>
           <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700 }}>
-            Workshop Maintenance Schedule
+            Workshop Maintenance Schedule & Work Orders
           </h3>
         </div>
         <button onClick={() => setAddModalOpen(true)} className="btn btn-primary">
@@ -146,14 +149,14 @@ export function Maintenance({ machines, showToast, prefillData = null, onClearPr
         ))}
       </div>
 
-      {/* Schedule Table */}
+      {/* Active Schedule Table */}
       <div className="card">
         <div style={{ marginBottom: 14 }}>
           <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', fontWeight: 600 }}>
             // ACTIVE WORK ORDERS
           </span>
           <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700 }}>
-            Upcoming & Active Maintenance
+            Maintenance Schedule & Pending Work Orders
           </h3>
         </div>
 
@@ -174,14 +177,14 @@ export function Maintenance({ machines, showToast, prefillData = null, onClearPr
                 </tr>
               </thead>
               <tbody>
-                {schedule.length === 0 ? (
+                {pendingTasks.length === 0 ? (
                   <tr>
                     <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '36px 0' }}>
-                      No maintenance tasks scheduled. Click "Schedule Task" to add one.
+                      No pending maintenance tasks. Click "Schedule Task" to add one.
                     </td>
                   </tr>
                 ) : (
-                  schedule.map(task => (
+                  pendingTasks.map(task => (
                     <tr key={task.id}>
                       <td><strong>{task.machine_name || `Machine #${task.machine_id}`}</strong></td>
                       <td>
@@ -241,15 +244,102 @@ export function Maintenance({ machines, showToast, prefillData = null, onClearPr
         )}
       </div>
 
+      {/* History Section - Completed Work Orders Only */}
+      <div className="card">
+        <div style={{ marginBottom: 14 }}>
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--status-healthy)', fontWeight: 600 }}>
+            // MAINTENANCE HISTORY
+          </span>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700 }}>
+            Completed Work Orders & History
+          </h3>
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>Loading history...</div>
+        ) : (
+          <div className="data-table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Machine</th>
+                  <th>Task Type</th>
+                  <th>Priority</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {completedTasks.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '36px 0' }}>
+                      No completed maintenance tasks in history yet.
+                    </td>
+                  </tr>
+                ) : (
+                  completedTasks.map(task => (
+                    <tr key={task.id}>
+                      <td><strong>{task.machine_name || `Machine #${task.machine_id}`}</strong></td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <CheckCircle2 size={13} style={{ color: 'var(--status-healthy)' }} />
+                          {task.task_type || task.task_description || '—'}
+                        </div>
+                      </td>
+                      <td>
+                        <span style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-full)',
+                          background: 'var(--bg-surface-raised)',
+                          color: 'var(--text-secondary)'
+                        }}>
+                          {task.priority}
+                        </span>
+                      </td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                        {(task.due_date || task.scheduled_date)
+                          ? new Date(task.due_date || task.scheduled_date).toLocaleDateString()
+                          : '—'}
+                      </td>
+                      <td><StatusPill status={task.status} /></td>
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 200, wordBreak: 'break-word' }}>
+                        {task.notes || task.task_description || '—'}
+                      </td>
+                      <td>
+                        <select
+                          className="select-field"
+                          style={{ padding: '5px 8px', fontSize: 11, width: 130 }}
+                          value={task.status}
+                          onChange={e => handleStatusChange(task.id, e.target.value)}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="completed">Completed</option>
+                          <option value="overdue">Overdue</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Add Task Modal */}
       {addModalOpen && (
         <div
           style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16
           }}
         >
-          <div className="card" style={{ width: '100%', maxWidth: 480, background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', boxShadow: 'var(--shadow-modal)' }}>
+          <div className="card" style={{ width: '100%', maxWidth: 480, background: 'var(--bg-surface)', border: '3px solid var(--card-border-color)', boxShadow: 'var(--shadow-xl)', borderRadius: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700 }}>Schedule Maintenance Task</h3>
               <button onClick={() => setAddModalOpen(false)} className="btn btn-outline" style={{ padding: '6px' }}><X size={16} /></button>

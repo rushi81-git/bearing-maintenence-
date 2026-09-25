@@ -20,7 +20,6 @@ import {
   Plus,
   Volume2,
   VolumeX,
-  Radio,
   Gauge,
   Sliders,
   Maximize2,
@@ -28,7 +27,11 @@ import {
   Flame,
   Check,
   Terminal,
-  Crosshair
+  Crosshair,
+  Edit,
+  Trash2,
+  X,
+  Save
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -44,9 +47,9 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { parseVibrationCsv } from '../../utils/csvParser';
+import { parseVibrationCsv, parseVibrationExcel } from '../../utils/csvParser';
 import { generateDiagnosticPDF } from '../../utils/pdfReportGenerator';
-import { analyzeBearingSignal, createMachine, createScheduleEntry } from '../../services/api';
+import { analyzeBearingSignal, createMachine, updateMachine, deleteMachine, createScheduleEntry } from '../../services/api';
 
 // ── Web Audio Acoustic Synthesizer for Bearing Fault Simulation ──
 function playBearingAcousticPulse(faultType = 'Inner Race', duration = 3.5) {
@@ -151,6 +154,13 @@ export function IndustrialDashboard({
   });
   const [isAddingMachine, setIsAddingMachine] = useState(false);
 
+  // ── Edit / Delete State ──
+  const [editingMachine, setEditingMachine] = useState(null); // machine object being edited
+  const [editForm, setEditForm] = useState({ name: '', type: '', location: '' });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null); // id awaiting delete confirm
+  const [isDeletingMachine, setIsDeletingMachine] = useState(false);
+
   // ── Step 2 State ──
   const [bearingLocation, setBearingLocation] = useState('Drive End (DE)');
   const [parsedCsv, setParsedCsv] = useState(null);
@@ -243,16 +253,84 @@ export function IndustrialDashboard({
     }
   };
 
+  // ── Edit Machine Handler ──
+  const handleStartEdit = (m) => {
+    setEditingMachine(m);
+    setEditForm({
+      name: m.name || '',
+      type: m.machine_type || m.type || 'Induction Motor',
+      location: m.location || ''
+    });
+    setMachineMode('select');
+  };
+
+  const handleUpdateMachine = async (e) => {
+    e.preventDefault();
+    if (!editForm.name.trim()) {
+      showToast('Machine Name is required', 'error');
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      const res = await updateMachine(editingMachine.id, {
+        name: editForm.name.trim(),
+        type: editForm.type,
+        location: editForm.location
+      });
+      if (res.success !== false) {
+        showToast(`Machine "${editForm.name}" updated successfully!`, 'success');
+        if (onRefreshMachines) await onRefreshMachines();
+        setEditingMachine(null);
+      } else {
+        showToast(res.message || 'Failed to update machine', 'error');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // ── Delete Machine Handler ──
+  const handleDeleteMachine = async (id) => {
+    setIsDeletingMachine(true);
+    try {
+      const res = await deleteMachine(id);
+      if (res.success !== false) {
+        showToast('Machine deleted.', 'success');
+        if (onRefreshMachines) await onRefreshMachines();
+        if (String(selectedMachineId) === String(id)) setSelectedMachineId('');
+        setConfirmDeleteId(null);
+        setIsStep1Confirmed(false);
+      } else {
+        showToast(res.message || 'Failed to delete machine', 'error');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setIsDeletingMachine(false);
+    }
+  };
+
   // ── Handlers for Step 2 ──
   const handleFileProcess = async (file) => {
     if (!file) return;
-    if (!file.name.endsWith('.csv') && !file.name.endsWith('.txt')) {
-      showToast('Please upload a valid CSV or TXT file', 'error');
+    const name = file.name.toLowerCase();
+    const isExcel = name.endsWith('.xlsx') || name.endsWith('.xls');
+    const isCsv   = name.endsWith('.csv') || name.endsWith('.txt');
+    if (!isExcel && !isCsv) {
+      showToast('Please upload a CSV, TXT, XLSX, or XLS file', 'error');
       return;
     }
     try {
-      const text = await file.text();
-      const parsed = parseVibrationCsv(text, file.name);
+      let parsed;
+      if (isExcel) {
+        const buffer = await file.arrayBuffer();
+        parsed = parseVibrationExcel(buffer, file.name);
+      } else {
+        const text = await file.text();
+        parsed = parseVibrationCsv(text, file.name);
+      }
       setParsedCsv(parsed);
       setSelectedColumnIndex(parsed.defaultColumnIndex || 0);
       setSourceFilename(file.name);
@@ -420,18 +498,15 @@ export function IndustrialDashboard({
       {/* ═════════════════════════════════════════════════════════════════════════ */}
       <div
         style={{
-          background: 'linear-gradient(180deg, #0f172a 0%, #090e1a 100%)',
+          background: 'var(--bg-surface)',
           borderRadius: 'var(--radius-lg)',
-          border: '1px solid rgba(56, 189, 248, 0.25)',
-          padding: '16px 22px',
-          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.08)',
+          border: '1px solid var(--border-subtle)',
+          padding: '18px 24px',
+          boxShadow: 'var(--shadow-md)',
           position: 'relative',
           overflow: 'hidden'
         }}
       >
-        {/* Glow corner effects */}
-        <div style={{ position: 'absolute', top: -40, right: -40, width: 140, height: 140, background: 'radial-gradient(circle, rgba(56, 189, 248, 0.18) 0%, transparent 70%)', pointerEvents: 'none' }} />
-
         {/* Top Ticker Row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -469,7 +544,7 @@ export function IndustrialDashboard({
         {/* Stepper Pipeline Controls */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0, letterSpacing: '-0.02em', background: 'linear-gradient(90deg, #f0f6ff 0%, #38bdf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0, letterSpacing: '0.02em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
               Dual-Bearing Vibration Diagnostics Console
             </h1>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
@@ -477,7 +552,7 @@ export function IndustrialDashboard({
             </div>
           </div>
 
-          {/* Stepper Pills with Active Glow */}
+          {/* Stepper Pills */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div
               style={{
@@ -485,13 +560,13 @@ export function IndustrialDashboard({
                 alignItems: 'center',
                 gap: 6,
                 padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
+                borderRadius: 0,
                 fontSize: 12,
-                fontWeight: 700,
-                background: isStep1Confirmed ? 'rgba(16, 217, 160, 0.15)' : 'rgba(56, 189, 248, 0.15)',
-                color: isStep1Confirmed ? '#10d9a0' : '#38bdf8',
-                border: `1px solid ${isStep1Confirmed ? 'rgba(16, 217, 160, 0.4)' : '#38bdf8'}`,
-                boxShadow: isStep1Confirmed ? '0 0 10px rgba(16, 217, 160, 0.2)' : '0 0 10px rgba(56, 189, 248, 0.2)'
+                fontWeight: 800,
+                background: isStep1Confirmed ? 'var(--status-healthy-bg)' : 'var(--bg-surface-raised)',
+                color: isStep1Confirmed ? 'var(--status-healthy)' : 'var(--text-primary)',
+                border: `2px solid ${isStep1Confirmed ? 'var(--status-healthy)' : 'var(--card-border-color)'}`,
+                boxShadow: 'var(--shadow-xs)'
               }}
             >
               {isStep1Confirmed ? <CheckCircle2 size={14} /> : <span>01</span>}
@@ -506,12 +581,13 @@ export function IndustrialDashboard({
                 alignItems: 'center',
                 gap: 6,
                 padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
+                borderRadius: 0,
                 fontSize: 12,
-                fontWeight: 700,
-                background: isStep2Done ? 'rgba(16, 217, 160, 0.15)' : isStep1Confirmed ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                color: isStep2Done ? '#10d9a0' : isStep1Confirmed ? '#38bdf8' : 'var(--text-muted)',
-                border: `1px solid ${isStep2Done ? 'rgba(16, 217, 160, 0.4)' : isStep1Confirmed ? '#38bdf8' : 'rgba(255,255,255,0.08)'}`
+                fontWeight: 800,
+                background: isStep2Done ? 'var(--status-healthy-bg)' : isStep1Confirmed ? 'var(--bg-surface-raised)' : 'var(--bg-surface-sunken)',
+                color: isStep2Done ? 'var(--status-healthy)' : isStep1Confirmed ? 'var(--text-primary)' : 'var(--text-muted)',
+                border: `2px solid ${isStep2Done ? 'var(--status-healthy)' : isStep1Confirmed ? 'var(--card-border-color)' : 'var(--border-subtle)'}`,
+                boxShadow: isStep1Confirmed ? 'var(--shadow-xs)' : 'none'
               }}
             >
               {isStep2Done ? <CheckCircle2 size={14} /> : isStep1Confirmed ? <span>02</span> : <Lock size={12} />}
@@ -526,12 +602,13 @@ export function IndustrialDashboard({
                 alignItems: 'center',
                 gap: 6,
                 padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
+                borderRadius: 0,
                 fontSize: 12,
-                fontWeight: 700,
-                background: isStep2Done ? 'rgba(16, 217, 160, 0.15)' : 'rgba(255,255,255,0.03)',
-                color: isStep2Done ? '#10d9a0' : 'var(--text-muted)',
-                border: `1px solid ${isStep2Done ? 'rgba(16, 217, 160, 0.4)' : 'rgba(255,255,255,0.08)'}`
+                fontWeight: 800,
+                background: isStep2Done ? 'var(--status-healthy-bg)' : 'var(--bg-surface-sunken)',
+                color: isStep2Done ? 'var(--status-healthy)' : 'var(--text-muted)',
+                border: `2px solid ${isStep2Done ? 'var(--status-healthy)' : 'var(--border-subtle)'}`,
+                boxShadow: isStep2Done ? 'var(--shadow-xs)' : 'none'
               }}
             >
               {isStep2Done ? <CheckCircle2 size={14} /> : <Lock size={12} />}
@@ -546,12 +623,13 @@ export function IndustrialDashboard({
                 alignItems: 'center',
                 gap: 6,
                 padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
+                borderRadius: 0,
                 fontSize: 12,
-                fontWeight: 700,
-                background: dispatchSuccess ? 'rgba(16, 217, 160, 0.15)' : isStep2Done ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                color: dispatchSuccess ? '#10d9a0' : isStep2Done ? '#38bdf8' : 'var(--text-muted)',
-                border: `1px solid ${dispatchSuccess ? 'rgba(16, 217, 160, 0.4)' : isStep2Done ? '#38bdf8' : 'rgba(255,255,255,0.08)'}`
+                fontWeight: 800,
+                background: dispatchSuccess ? 'var(--status-healthy-bg)' : isStep2Done ? 'var(--bg-surface-raised)' : 'var(--bg-surface-sunken)',
+                color: dispatchSuccess ? 'var(--status-healthy)' : isStep2Done ? 'var(--text-primary)' : 'var(--text-muted)',
+                border: `2px solid ${dispatchSuccess ? 'var(--status-healthy)' : isStep2Done ? 'var(--card-border-color)' : 'var(--border-subtle)'}`,
+                boxShadow: dispatchSuccess || isStep2Done ? 'var(--shadow-xs)' : 'none'
               }}
             >
               {dispatchSuccess ? <CheckCircle2 size={14} /> : <span>04</span>}
@@ -569,9 +647,9 @@ export function IndustrialDashboard({
         style={{
           background: 'var(--bg-surface)',
           borderRadius: 'var(--radius-lg)',
-          border: isStep1Confirmed ? '2px solid rgba(16, 217, 160, 0.6)' : '2px solid #38bdf8',
+          border: isStep1Confirmed ? '3px solid var(--status-healthy-border)' : '3px solid var(--card-border-color)',
           overflow: 'hidden',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          boxShadow: 'var(--shadow-card)',
           position: 'relative'
         }}
       >
@@ -579,7 +657,7 @@ export function IndustrialDashboard({
         <div
           style={{
             padding: '18px 24px',
-            background: isStep1Confirmed ? 'rgba(16, 217, 160, 0.08)' : 'var(--bg-surface-raised)',
+            background: isStep1Confirmed ? 'var(--status-healthy-bg)' : 'var(--bg-surface-raised)',
             borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
@@ -593,7 +671,7 @@ export function IndustrialDashboard({
               style={{
                 width: 36,
                 height: 36,
-                borderRadius: '10px',
+                borderRadius: 0,
                 background: isStep1Confirmed ? '#10d9a0' : '#38bdf8',
                 color: '#ffffff',
                 display: 'flex',
@@ -601,7 +679,7 @@ export function IndustrialDashboard({
                 justifyContent: 'center',
                 fontWeight: 900,
                 fontSize: 16,
-                boxShadow: isStep1Confirmed ? '0 0 12px rgba(16, 217, 160, 0.4)' : '0 0 12px rgba(56, 189, 248, 0.4)'
+                boxShadow: 'var(--shadow-xs)'
               }}
             >
               {isStep1Confirmed ? <CheckCircle2 size={20} /> : '01'}
@@ -664,9 +742,9 @@ export function IndustrialDashboard({
                 flex: 1,
                 padding: '14px 18px',
                 borderRadius: 'var(--radius-md)',
-                border: machineMode === 'select' ? '2px solid #38bdf8' : '1px solid var(--border-subtle)',
-                background: machineMode === 'select' ? 'rgba(56, 189, 248, 0.12)' : 'var(--bg-surface-raised)',
-                color: machineMode === 'select' ? '#38bdf8' : 'var(--text-secondary)',
+                border: machineMode === 'select' ? '3px solid var(--text-primary)' : '2px solid var(--card-border-color)',
+                background: machineMode === 'select' ? 'var(--text-primary)' : 'var(--bg-surface)',
+                color: machineMode === 'select' ? 'var(--bg-surface)' : 'var(--text-secondary)',
                 fontWeight: 800,
                 fontSize: 14,
                 cursor: 'pointer',
@@ -674,7 +752,7 @@ export function IndustrialDashboard({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 10,
-                boxShadow: machineMode === 'select' ? '0 0 16px rgba(56, 189, 248, 0.2)' : 'none'
+                boxShadow: machineMode === 'select' ? 'var(--shadow-md)' : 'var(--shadow-xs)'
               }}
             >
               <Cpu size={20} />
@@ -689,9 +767,9 @@ export function IndustrialDashboard({
                 flex: 1,
                 padding: '14px 18px',
                 borderRadius: 'var(--radius-md)',
-                border: machineMode === 'add' ? '2px solid #38bdf8' : '1px solid var(--border-subtle)',
-                background: machineMode === 'add' ? 'rgba(56, 189, 248, 0.12)' : 'var(--bg-surface-raised)',
-                color: machineMode === 'add' ? '#38bdf8' : 'var(--text-secondary)',
+                border: machineMode === 'add' ? '3px solid var(--text-primary)' : '2px solid var(--card-border-color)',
+                background: machineMode === 'add' ? 'var(--text-primary)' : 'var(--bg-surface)',
+                color: machineMode === 'add' ? 'var(--bg-surface)' : 'var(--text-secondary)',
                 fontWeight: 800,
                 fontSize: 14,
                 cursor: 'pointer',
@@ -699,7 +777,7 @@ export function IndustrialDashboard({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 10,
-                boxShadow: machineMode === 'add' ? '0 0 16px rgba(56, 189, 248, 0.2)' : 'none'
+                boxShadow: machineMode === 'add' ? 'var(--shadow-md)' : 'var(--shadow-xs)'
               }}
             >
               <Plus size={20} />
@@ -720,22 +798,24 @@ export function IndustrialDashboard({
               >
                 {machines.map((m) => {
                   const isSelected = String(m.id) === String(selectedMachineId);
+                  const isConfirmingDelete = String(confirmDeleteId) === String(m.id);
                   return (
                     <div
                       key={m.id}
                       id={`machine-card-${m.id}`}
-                      onClick={() => setSelectedMachineId(String(m.id))}
+                      onClick={() => { if (!isConfirmingDelete) setSelectedMachineId(String(m.id)); }}
                       style={{
                         padding: '18px 20px',
                         borderRadius: 'var(--radius-md)',
-                        border: isSelected ? '2px solid #38bdf8' : '1px solid var(--border-subtle)',
-                        background: isSelected ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(13, 21, 37, 0.9) 100%)' : 'var(--bg-surface-raised)',
-                        cursor: 'pointer',
+                        border: isSelected ? '3px solid var(--text-primary)' : isConfirmingDelete ? '3px solid #ef4444' : '2px solid var(--card-border-color)',
+                        background: isConfirmingDelete ? 'rgba(239,68,68,0.06)' : isSelected ? 'var(--bg-surface-raised)' : 'var(--bg-surface)',
+                        cursor: isConfirmingDelete ? 'default' : 'pointer',
                         transition: 'all 0.18s ease',
                         position: 'relative',
-                        boxShadow: isSelected ? '0 0 20px rgba(56, 189, 248, 0.25), 0 4px 16px rgba(0,0,0,0.5)' : 'none'
+                        boxShadow: isSelected ? 'var(--shadow-md)' : 'var(--shadow-xs)'
                       }}
                     >
+                      {/* Row 1: type badge + active badge + action buttons */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                         <span
                           style={{
@@ -744,19 +824,103 @@ export function IndustrialDashboard({
                             textTransform: 'uppercase',
                             padding: '3px 9px',
                             borderRadius: 4,
-                            background: isSelected ? '#38bdf8' : 'rgba(255,255,255,0.06)',
-                            color: isSelected ? '#060b14' : 'var(--text-secondary)',
+                            background: isSelected ? 'var(--text-primary)' : 'var(--bg-surface-sunken)',
+                            color: isSelected ? 'var(--bg-surface)' : 'var(--text-secondary)',
                             fontFamily: 'var(--font-mono)'
                           }}
                         >
                           {m.machine_type || m.type || 'Induction Motor'}
                         </span>
-                        {isSelected && (
-                          <span style={{ color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 800 }}>
-                            <CheckCircle2 size={16} /> ACTIVE ASSET
-                          </span>
-                        )}
+                        {/* Edit / Delete action buttons */}
+                        <div
+                          style={{ display: 'flex', gap: 6 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            title="Edit machine"
+                            onClick={() => handleStartEdit(m)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 0,
+                              border: '1.5px solid var(--card-border-color)',
+                              background: 'var(--bg-surface)',
+                              color: 'var(--text-secondary)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontSize: 11,
+                              fontWeight: 700
+                            }}
+                          >
+                            <Edit size={12} /> Edit
+                          </button>
+                          <button
+                            type="button"
+                            title="Delete machine"
+                            onClick={() => setConfirmDeleteId(isConfirmingDelete ? null : m.id)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 0,
+                              border: '1.5px solid #ef4444',
+                              background: isConfirmingDelete ? '#ef4444' : 'transparent',
+                              color: isConfirmingDelete ? '#fff' : '#ef4444',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontSize: 11,
+                              fontWeight: 700
+                            }}
+                          >
+                            <Trash2 size={12} /> {isConfirmingDelete ? 'Cancel' : 'Delete'}
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Delete confirmation prompt */}
+                      {isConfirmingDelete && (
+                        <div
+                          style={{
+                            marginBottom: 12,
+                            padding: '10px 12px',
+                            background: 'rgba(239,68,68,0.1)',
+                            border: '1.5px solid #ef4444',
+                            borderRadius: 'var(--radius-sm)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>
+                            Permanently delete this machine?
+                          </span>
+                          <button
+                            type="button"
+                            disabled={isDeletingMachine}
+                            onClick={() => handleDeleteMachine(m.id)}
+                            style={{
+                              padding: '5px 14px',
+                              borderRadius: 0,
+                              border: '2px solid #ef4444',
+                              background: '#ef4444',
+                              color: '#fff',
+                              fontWeight: 800,
+                              fontSize: 12,
+                              cursor: isDeletingMachine ? 'wait' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6
+                            }}
+                          >
+                            {isDeletingMachine ? <RefreshCw size={12} className="spin" /> : <Trash2 size={12} />}
+                            Confirm Delete
+                          </button>
+                        </div>
+                      )}
 
                       <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>
                         {m.name}
@@ -791,10 +955,163 @@ export function IndustrialDashboard({
                           <strong style={{ color: '#818cf8' }}>SKF 6203 Deep Groove</strong>
                         </div>
                       </div>
+
+                      {isSelected && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: 14,
+                            right: 14,
+                            color: '#38bdf8',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 11,
+                            fontWeight: 800
+                          }}
+                        >
+                          <CheckCircle2 size={14} /> ACTIVE
+                        </span>
+                      )}
                     </div>
                   );
                 })}
               </div>
+
+              {/* ── Inline Edit Panel ── */}
+              {editingMachine && (
+                <form
+                  onSubmit={handleUpdateMachine}
+                  style={{
+                    marginTop: 20,
+                    background: 'var(--bg-surface-raised)',
+                    padding: '22px 24px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '2px solid var(--text-primary)',
+                    boxShadow: 'var(--shadow-md)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: 1 }}>
+                      Edit: {editingMachine.name}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setEditingMachine(null)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Machine Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={editForm.name}
+                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--bg-base)',
+                          color: 'var(--text-primary)',
+                          fontSize: 14
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Equipment Category</label>
+                      <select
+                        value={editForm.type}
+                        onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--bg-base)',
+                          color: 'var(--text-primary)',
+                          fontSize: 14
+                        }}
+                      >
+                        <option value="Induction Motor">Induction Motor (Dual Bearing)</option>
+                        <option value="Centrifugal Pump">Centrifugal Pump</option>
+                        <option value="CNC Lathe Spindle">CNC Lathe Spindle</option>
+                        <option value="Air Compressor">Air Compressor</option>
+                        <option value="Gearbox Shaft">Gearbox Input Shaft</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Workshop Bay / Location</label>
+                      <input
+                        type="text"
+                        value={editForm.location}
+                        onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--bg-base)',
+                          color: 'var(--text-primary)',
+                          fontSize: 14
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                    <button
+                      type="button"
+                      onClick={() => setEditingMachine(null)}
+                      style={{
+                        padding: '10px 18px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--border-subtle)',
+                        background: 'transparent',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontWeight: 700
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingEdit}
+                      style={{
+                        padding: '10px 22px',
+                        borderRadius: 0,
+                        border: '2px solid var(--card-border-color)',
+                        background: 'var(--text-primary)',
+                        color: 'var(--bg-surface)',
+                        fontWeight: 800,
+                        cursor: isSavingEdit ? 'wait' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        boxShadow: 'var(--shadow-btn)'
+                      }}
+                    >
+                      {isSavingEdit ? <RefreshCw size={15} className="spin" /> : <Save size={15} />}
+                      Save Changes
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 
@@ -904,16 +1221,16 @@ export function IndustrialDashboard({
                   disabled={isAddingMachine}
                   style={{
                     padding: '11px 22px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
-                    color: '#ffffff',
+                    borderRadius: 0,
+                    border: '2px solid var(--card-border-color)',
+                    background: 'var(--text-primary)',
+                    color: 'var(--bg-surface)',
                     fontWeight: 800,
                     cursor: isAddingMachine ? 'wait' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    boxShadow: '0 4px 14px rgba(56, 189, 248, 0.4)'
+                    boxShadow: 'var(--shadow-btn)'
                   }}
                 >
                   {isAddingMachine ? <RefreshCw size={16} className="spin" /> : <Plus size={16} />}
@@ -944,17 +1261,17 @@ export function IndustrialDashboard({
               onClick={handleConfirmStep1}
               style={{
                 padding: '14px 28px',
-                borderRadius: 'var(--radius-md)',
-                background: 'linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)',
-                color: '#ffffff',
-                border: 'none',
+                borderRadius: 0,
+                background: 'var(--text-primary)',
+                color: 'var(--bg-surface)',
+                border: '2px solid var(--card-border-color)',
                 fontWeight: 800,
                 fontSize: 14,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
-                boxShadow: '0 4px 16px rgba(56, 189, 248, 0.4)'
+                boxShadow: 'var(--shadow-btn)'
               }}
             >
               <span>Confirm Machine & Unlock CSV Ingestion (Step 2)</span>
@@ -981,14 +1298,14 @@ export function IndustrialDashboard({
           opacity: isStep1Confirmed ? 1 : 0.65,
           pointerEvents: isStep1Confirmed ? 'auto' : 'none',
           transition: 'all 0.25s ease',
-          boxShadow: isStep1Confirmed ? '0 8px 32px rgba(0,0,0,0.4)' : 'none'
+          boxShadow: isStep1Confirmed ? 'var(--shadow-card)' : 'none'
         }}
       >
         {/* Step 2 Header */}
         <div
           style={{
             padding: '18px 24px',
-            background: isStep2Done ? 'rgba(16, 217, 160, 0.08)' : 'var(--bg-surface-raised)',
+            background: isStep2Done ? 'var(--status-healthy-bg)' : 'var(--bg-surface-raised)',
             borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
@@ -1002,25 +1319,25 @@ export function IndustrialDashboard({
               style={{
                 width: 36,
                 height: 36,
-                borderRadius: '10px',
-                background: isStep2Done ? '#10d9a0' : isStep1Confirmed ? '#38bdf8' : 'var(--text-muted)',
+                borderRadius: 0,
+                background: isStep2Done ? 'var(--status-healthy)' : isStep1Confirmed ? 'var(--text-primary)' : 'var(--bg-surface-sunken)',
                 color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: 900,
                 fontSize: 16,
-                boxShadow: isStep2Done ? '0 0 12px rgba(16, 217, 160, 0.4)' : '0 0 12px rgba(56, 189, 248, 0.4)'
+                boxShadow: 'var(--shadow-xs)'
               }}
             >
               {isStep2Done ? <CheckCircle2 size={20} /> : isStep1Confirmed ? '02' : <Lock size={16} />}
             </div>
             <div>
-              <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>
-                Step 2: CSV Vibration Telemetry & Interactive Induction Motor Cutaway
+              <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>
+                Step 2: CSV Vibration Telemetry & Bearing Housing Selection
               </h2>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Click bearing nodes on the motor cutaway diagram, ingest 12k/48k accelerometer time-series & inspect spectrum
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                Target bearing accelerometer acquisition point, ingest 12k/48k vibration time-series & inspect spectral peaks
               </span>
             </div>
           </div>
@@ -1034,173 +1351,11 @@ export function IndustrialDashboard({
 
         {/* Step 2 Body */}
         <div style={{ padding: '24px' }}>
-          
-          {/* ── Interactive Induction Motor Cutaway Schematic (SVG) ── */}
-          <div
-            style={{
-              background: 'linear-gradient(180deg, #0b1120 0%, #060a12 100%)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid rgba(56, 189, 248, 0.2)',
-              padding: '20px',
-              marginBottom: 24,
-              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.8)'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-mono)' }}>
-                  // INTERACTIVE MECHANICAL SCHEMATIC
-                </span>
-                <h3 style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>
-                  3-Phase Induction Motor Bearing Sensor Locations
-                </h3>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                Target: <span style={{ color: '#10d9a0', fontWeight: 800 }}>{bearingLocation}</span>
-              </div>
-            </div>
-
-            {/* SVG Motor Cutaway */}
-            <div style={{ width: '100%', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg viewBox="0 0 760 200" style={{ width: '100%', height: '100%', maxHeight: 180 }}>
-                {/* Motor Stator Outer Casing with Fins */}
-                <rect x="170" y="30" width="420" height="140" rx="10" fill="#1e293b" stroke="#475569" strokeWidth="2" />
-                {/* Cooling Fins */}
-                {[...Array(14)].map((_, i) => (
-                  <line key={i} x1={200 + i * 28} y1="20" x2={200 + i * 28} y2="30" stroke="#64748b" strokeWidth="3" />
-                ))}
-
-                {/* Stator Internal Windings (Laminated Core) */}
-                <rect x="240" y="45" width="280" height="110" rx="4" fill="#0f172a" stroke="#334155" strokeWidth="1.5" />
-                <text x="380" y="105" textAnchor="middle" fill="#475569" fontSize="13" fontWeight="800" fontFamily="var(--font-mono)">
-                  ROTOR CORE & STATOR WINDINGS (1772 RPM)
-                </text>
-
-                {/* Central Rotating Shaft */}
-                <rect x="30" y="88" width="700" height="24" rx="3" fill="url(#shaftGrad)" stroke="#94a3b8" strokeWidth="1.5" />
-                <defs>
-                  <linearGradient id="shaftGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#94a3b8" />
-                    <stop offset="50%" stopColor="#cbd5e1" />
-                    <stop offset="100%" stopColor="#64748b" />
-                  </linearGradient>
-                </defs>
-
-                {/* Cooling Fan at Left (Fan End) */}
-                <path d="M 120 40 L 150 55 L 150 145 L 120 160 Z" fill="#334155" stroke="#64748b" strokeWidth="1.5" />
-                <text x="135" y="185" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="var(--font-mono)">COOLING FAN</text>
-
-                {/* Output Coupling Hub at Right (Drive End) */}
-                <rect x="640" y="70" width="70" height="60" rx="4" fill="#334155" stroke="#64748b" strokeWidth="2" />
-                <text x="675" y="150" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="var(--font-mono)">OUTPUT SHAFT</text>
-
-                {/* ── FAN END (FE) BEARING NODE ── */}
-                <g
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setBearingLocation('Fan End (FE)')}
-                >
-                  <rect
-                    x="150"
-                    y="65"
-                    width="40"
-                    height="70"
-                    rx="6"
-                    fill={bearingLocation === 'Fan End (FE)' ? 'rgba(129, 140, 248, 0.4)' : '#1e293b'}
-                    stroke={bearingLocation === 'Fan End (FE)' ? '#818cf8' : '#64748b'}
-                    strokeWidth={bearingLocation === 'Fan End (FE)' ? 3 : 1.5}
-                  />
-                  <circle cx="170" cy="100" r="10" fill={bearingLocation === 'Fan End (FE)' ? '#818cf8' : '#475569'} />
-                  <text x="170" y="55" textAnchor="middle" fill={bearingLocation === 'Fan End (FE)' ? '#818cf8' : '#94a3b8'} fontSize="11" fontWeight="800" fontFamily="var(--font-mono)">
-                    FE BEARING (SKF 6203)
-                  </text>
-                  {bearingLocation === 'Fan End (FE)' && (
-                    <circle cx="170" cy="100" r="18" fill="none" stroke="#818cf8" strokeWidth="2" strokeDasharray="4 2">
-                      <animateTransform attributeName="transform" type="rotate" from="0 170 100" to="360 170 100" dur="4s" repeatCount="indefinite" />
-                    </circle>
-                  )}
-                </g>
-
-                {/* ── DRIVE END (DE) BEARING NODE ── */}
-                <g
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setBearingLocation('Drive End (DE)')}
-                >
-                  <rect
-                    x="570"
-                    y="60"
-                    width="45"
-                    height="80"
-                    rx="6"
-                    fill={bearingLocation === 'Drive End (DE)' ? 'rgba(56, 189, 248, 0.4)' : '#1e293b'}
-                    stroke={bearingLocation === 'Drive End (DE)' ? '#38bdf8' : '#64748b'}
-                    strokeWidth={bearingLocation === 'Drive End (DE)' ? 3 : 1.5}
-                  />
-                  <circle cx="592" cy="100" r="12" fill={bearingLocation === 'Drive End (DE)' ? '#38bdf8' : '#475569'} />
-                  <text x="592" y="50" textAnchor="middle" fill={bearingLocation === 'Drive End (DE)' ? '#38bdf8' : '#94a3b8'} fontSize="11" fontWeight="800" fontFamily="var(--font-mono)">
-                    DE BEARING (SKF 6205) [ACTIVE]
-                  </text>
-                  {bearingLocation === 'Drive End (DE)' && (
-                    <circle cx="592" cy="100" r="22" fill="none" stroke="#38bdf8" strokeWidth="2" strokeDasharray="4 2">
-                      <animateTransform attributeName="transform" type="rotate" from="0 592 100" to="360 592 100" dur="3s" repeatCount="indefinite" />
-                    </circle>
-                  )}
-                </g>
-              </svg>
-            </div>
-
-            {/* Quick Toggle Buttons below cutaway */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginTop: 10 }}>
-              <button
-                type="button"
-                id="btn-select-de"
-                onClick={() => setBearingLocation('Drive End (DE)')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 'var(--radius-full)',
-                  border: bearingLocation === 'Drive End (DE)' ? '2px solid #38bdf8' : '1px solid var(--border-subtle)',
-                  background: bearingLocation === 'Drive End (DE)' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-                  color: bearingLocation === 'Drive End (DE)' ? '#38bdf8' : 'var(--text-secondary)',
-                  fontWeight: 800,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}
-              >
-                <Crosshair size={14} />
-                <span>Drive End (DE) — SKF 6205 [Coupling Load]</span>
-              </button>
-
-              <button
-                type="button"
-                id="btn-select-fe"
-                onClick={() => setBearingLocation('Fan End (FE)')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 'var(--radius-full)',
-                  border: bearingLocation === 'Fan End (FE)' ? '2px solid #818cf8' : '1px solid var(--border-subtle)',
-                  background: bearingLocation === 'Fan End (FE)' ? 'rgba(129, 140, 248, 0.2)' : 'transparent',
-                  color: bearingLocation === 'Fan End (FE)' ? '#818cf8' : 'var(--text-secondary)',
-                  fontWeight: 800,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}
-              >
-                <Crosshair size={14} />
-                <span>Fan End (FE) — SKF 6203 [Cooling Shroud]</span>
-              </button>
-            </div>
-          </div>
-
           {/* ── CSV Upload Dropzone & Benchmark Loader ── */}
           <div style={{ marginBottom: 22 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <label style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>
-                Ingest Vibration Telemetry CSV Data:
+                Ingest Vibration Telemetry Data (CSV / Excel):
               </label>
               <button
                 type="button"
@@ -1229,7 +1384,7 @@ export function IndustrialDashboard({
             <input
               type="file"
               ref={fileInputRef}
-              accept=".csv,.txt"
+              accept=".csv,.txt,.xlsx,.xls"
               style={{ display: 'none' }}
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
@@ -1245,14 +1400,14 @@ export function IndustrialDashboard({
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
               style={{
-                border: isDragging ? '2px dashed #38bdf8' : '2px dashed rgba(56, 189, 248, 0.3)',
-                background: isDragging ? 'rgba(56, 189, 248, 0.15)' : 'var(--bg-surface-raised)',
+                border: isDragging ? '3px dashed var(--text-primary)' : '3px dashed var(--card-border-color)',
+                background: isDragging ? 'var(--accent-subtle)' : 'var(--bg-surface-sunken)',
                 borderRadius: 'var(--radius-lg)',
                 padding: '38px 24px',
                 textAlign: 'center',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.4)'
+                boxShadow: 'none'
               }}
             >
               <div
@@ -1273,10 +1428,10 @@ export function IndustrialDashboard({
               </div>
 
               <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>
-                {parsedCsv ? `Loaded File: ${sourceFilename}` : 'Click to Browse or Drag & Drop Vibration CSV File'}
+                {parsedCsv ? `Loaded File: ${sourceFilename}` : 'Click to Browse or Drag & Drop Vibration CSV / Excel File'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 540, margin: '0 auto' }}>
-                Auto-parser filters out row index counters (<code>Sample_No</code>, <code>Time_s</code>) and extracts acceleration amplitude (<code>Vibration_Acceleration_g</code>).
+                Supports <code>.csv</code>, <code>.txt</code>, and <code>.xlsx / .xls</code> files. Auto-parser filters out row index counters (<code>Sample_No</code>, <code>Time_s</code>) and extracts vibration acceleration telemetry.
               </div>
             </div>
           </div>
@@ -1419,7 +1574,7 @@ export function IndustrialDashboard({
             }}
           >
             <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Target: <strong style={{ color: '#38bdf8' }}>{bearingLocation}</strong> on <strong style={{ color: 'var(--text-primary)' }}>{selectedMachine?.name}</strong>
+              Target: <strong style={{ color: 'var(--text-primary)' }}>{bearingLocation}</strong> on <strong style={{ color: 'var(--text-primary)' }}>{selectedMachine?.name}</strong>
             </div>
 
             <button
@@ -1429,17 +1584,17 @@ export function IndustrialDashboard({
               onClick={handleRunDiagnosis}
               style={{
                 padding: '14px 32px',
-                borderRadius: 'var(--radius-md)',
-                background: parsedCsv ? 'linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)' : 'var(--bg-surface-raised)',
-                color: parsedCsv ? '#ffffff' : 'var(--text-muted)',
-                border: 'none',
+                borderRadius: 0,
+                background: parsedCsv ? 'var(--text-primary)' : 'var(--bg-surface-raised)',
+                color: parsedCsv ? 'var(--bg-surface)' : 'var(--text-muted)',
+                border: '2px solid var(--card-border-color)',
                 fontWeight: 900,
                 fontSize: 15,
                 cursor: parsedCsv && !isAnalyzing ? 'pointer' : 'not-allowed',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
-                boxShadow: parsedCsv ? '0 0 24px rgba(56, 189, 248, 0.4)' : 'none'
+                boxShadow: parsedCsv ? 'var(--shadow-btn)' : 'none'
               }}
             >
               {isAnalyzing ? (
@@ -1466,21 +1621,21 @@ export function IndustrialDashboard({
         id="step-3-section"
         style={{
           background: 'var(--bg-surface)',
-          borderRadius: 'var(--radius-lg)',
-          border: isStep2Done ? `2px solid ${faultColor}` : '1px solid var(--border-subtle)',
+          borderRadius: 0,
+          border: isStep2Done ? `3px solid ${faultColor}` : '3px solid var(--card-border-color)',
           overflow: 'hidden',
           opacity: isStep2Done ? 1 : 0.65,
           pointerEvents: isStep2Done ? 'auto' : 'none',
           transition: 'all 0.25s ease',
-          boxShadow: isStep2Done ? `0 8px 32px rgba(0,0,0,0.5), 0 0 20px ${faultColor}22` : 'none'
+          boxShadow: isStep2Done ? 'var(--shadow-card)' : 'none'
         }}
       >
         {/* Step 3 Header */}
         <div
           style={{
             padding: '18px 24px',
-            background: isStep2Done ? (isHealthy ? 'rgba(16, 217, 160, 0.08)' : 'rgba(239, 68, 68, 0.08)') : 'var(--bg-surface-raised)',
-            borderBottom: '1px solid var(--border-subtle)',
+            background: isStep2Done ? (isHealthy ? 'var(--status-healthy-bg)' : 'var(--status-critical-bg)') : 'var(--bg-surface-raised)',
+            borderBottom: '2px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -1493,21 +1648,22 @@ export function IndustrialDashboard({
               style={{
                 width: 36,
                 height: 36,
-                borderRadius: '10px',
+                borderRadius: 0,
                 background: isStep2Done ? faultColor : 'var(--text-muted)',
                 color: '#ffffff',
+                border: '2px solid #000',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: 900,
                 fontSize: 16,
-                boxShadow: isStep2Done ? `0 0 14px ${faultColor}66` : 'none'
+                boxShadow: isStep2Done ? 'var(--shadow-xs)' : 'none'
               }}
             >
               {isStep2Done ? (isHealthy ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />) : <Lock size={16} />}
             </div>
             <div>
-              <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>
+              <h2 style={{ fontSize: 17, fontWeight: 900, textTransform: 'uppercase', margin: 0, color: 'var(--text-primary)' }}>
                 Step 3: Machine Health Assessment & Vibration Severity (Bar Graphs)
               </h2>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -1517,8 +1673,8 @@ export function IndustrialDashboard({
           </div>
 
           {!isStep2Done && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#fbbf24', fontWeight: 700 }}>
-              <Lock size={14} /> Complete Step 2 First
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--status-warning)', fontWeight: 800 }}>
+              <Lock size={14} /> COMPLETE STEP 2 FIRST
             </div>
           )}
         </div>
@@ -1531,16 +1687,16 @@ export function IndustrialDashboard({
             <div
               style={{
                 padding: '24px',
-                borderRadius: 'var(--radius-lg)',
-                background: isHealthy ? 'rgba(16, 217, 160, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-                border: `2px solid ${faultColor}`,
+                borderRadius: 0,
+                background: isHealthy ? 'var(--status-healthy-bg)' : 'var(--status-critical-bg)',
+                border: `3px solid ${faultColor}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
                 gap: 20,
                 marginBottom: 24,
-                boxShadow: `0 0 24px ${faultColor}22`
+                boxShadow: 'var(--shadow-card)'
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
@@ -1548,20 +1704,21 @@ export function IndustrialDashboard({
                   style={{
                     width: 58,
                     height: 58,
-                    borderRadius: '50%',
+                    borderRadius: 0,
+                    border: '2px solid #000',
                     background: faultColor,
                     color: '#ffffff',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
-                    boxShadow: `0 0 20px ${faultColor}88`
+                    boxShadow: 'var(--shadow-xs)'
                   }}
                 >
                   {isHealthy ? <CheckCircle2 size={36} /> : <AlertTriangle size={36} />}
                 </div>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: faultColor }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', color: faultColor }}>
                     {isHealthy ? 'System Health Normal' : `${diagnosisResult.severity.toUpperCase()} FAULT DETECTED`}
                   </div>
                   <h3 style={{ fontSize: 24, fontWeight: 900, margin: '2px 0 4px', color: 'var(--text-primary)' }}>
@@ -1586,11 +1743,12 @@ export function IndustrialDashboard({
                     fontSize: 16,
                     fontWeight: 900,
                     padding: '8px 18px',
-                    borderRadius: 'var(--radius-full)',
+                    borderRadius: 0,
+                    border: '2px solid #000',
                     background: faultColor,
                     color: '#060b14',
                     fontFamily: 'var(--font-mono)',
-                    boxShadow: `0 0 16px ${faultColor}66`
+                    boxShadow: 'var(--shadow-xs)'
                   }}
                 >
                   {(diagnosisResult.prediction_probability * 100).toFixed(1)}% AI Confidence
@@ -1603,17 +1761,18 @@ export function IndustrialDashboard({
                   onClick={handlePlayAudio}
                   style={{
                     padding: '8px 14px',
-                    borderRadius: 'var(--radius-full)',
-                    background: audioPlaying ? '#38bdf8' : 'rgba(255,255,255,0.08)',
-                    color: audioPlaying ? '#060b14' : 'var(--text-primary)',
-                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: 0,
+                    background: audioPlaying ? 'var(--text-primary)' : 'var(--bg-surface-raised)',
+                    color: audioPlaying ? 'var(--bg-surface)' : 'var(--text-primary)',
+                    border: '2px solid var(--card-border-color)',
                     fontSize: 12,
                     fontWeight: 800,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6,
-                    transition: 'all 0.15s ease'
+                    transition: 'all 0.15s ease',
+                    boxShadow: 'var(--shadow-xs)'
                   }}
                 >
                   {audioPlaying ? <VolumeX size={15} /> : <Volume2 size={15} />}
@@ -1628,68 +1787,70 @@ export function IndustrialDashboard({
               {/* Bar Chart 1: Fault Probability Distribution */}
               <div
                 style={{
-                  background: 'var(--bg-surface-raised)',
-                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--bg-surface)',
+                  borderRadius: 0,
                   padding: '22px',
-                  border: '1px solid var(--border-subtle)',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+                  border: '2px solid var(--card-border-color)',
+                  boxShadow: 'var(--shadow-card)'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                   <div>
-                    <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
+                    <h4 style={{ margin: 0, fontSize: 16, fontWeight: 900, textTransform: 'uppercase', color: 'var(--text-primary)' }}>
                       Fault Probability Distribution (Bar Chart)
                     </h4>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                       Neural classification across mechanical defect modes
                     </span>
                   </div>
-                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#38bdf8', fontWeight: 800 }}>
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 800 }}>
                     100% Total
                   </span>
                 </div>
 
-                <div style={{ width: '100%', height: 240 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={diagnosisResult.probabilities || [
-                        { name: 'Normal', value: isHealthy ? 95 : 4, fill: '#10d9a0' },
-                        { name: 'Inner Race', value: diagnosisResult.fault_type === 'Inner Race' ? 84 : 4, fill: '#38bdf8' },
-                        { name: 'Ball Fault', value: diagnosisResult.fault_type === 'Ball' ? 85 : 3, fill: '#fbbf24' },
-                        { name: 'Outer Race', value: diagnosisResult.fault_type === 'Outer Race' ? 85 : 3, fill: '#f43f5e' }
-                      ]}
-                      margin={{ top: 10, right: 15, left: -20, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} interval={0} />
-                      <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} domain={[0, 100]} unit="%" />
-                      <Tooltip
-                        contentStyle={{ background: '#0d1525', border: '1px solid rgba(56, 189, 248, 0.4)', borderRadius: 8, fontSize: 12 }}
-                        formatter={(val) => [`${val}%`, 'Likelihood']}
-                      />
-                      <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                        {(diagnosisResult.probabilities || []).map((entry, idx) => (
-                          <Cell key={`cell-${idx}`} fill={entry.fill || '#38bdf8'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {(() => {
+                  const probData = diagnosisResult.probabilities || [
+                    { name: 'Normal',     value: isHealthy ? 95 : 4,                                   fill: '#10d9a0' },
+                    { name: 'Inner Race', value: diagnosisResult.fault_type === 'Inner Race' ? 84 : 4, fill: '#38bdf8' },
+                    { name: 'Ball Fault', value: diagnosisResult.fault_type === 'Ball' ? 85 : 3,       fill: '#fbbf24' },
+                    { name: 'Outer Race', value: diagnosisResult.fault_type === 'Outer Race' ? 85 : 3, fill: '#f43f5e' }
+                  ];
+                  return (
+                    <div style={{ width: '100%', height: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={probData} margin={{ top: 10, right: 15, left: -20, bottom: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} interval={0} />
+                          <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} domain={[0, 100]} unit="%" />
+                          <Tooltip
+                            contentStyle={{ background: 'var(--bg-surface)', border: '2px solid var(--card-border-color)', borderRadius: 0, boxShadow: 'var(--shadow-sm)', color: 'var(--text-primary)', fontSize: 12 }}
+                            formatter={(val) => [`${val}%`, 'Likelihood']}
+                          />
+                          <Bar dataKey="value" radius={[0, 0, 0, 0]}>
+                            {probData.map((entry, idx) => (
+                              <Cell key={`cell-${idx}`} fill={entry.fill || 'var(--text-primary)'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Bar Chart 2: ISO 10816-3 Vibration Severity Scale */}
               <div
                 style={{
-                  background: 'var(--bg-surface-raised)',
-                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--bg-surface)',
+                  borderRadius: 0,
                   padding: '22px',
-                  border: '1px solid var(--border-subtle)',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+                  border: '2px solid var(--card-border-color)',
+                  boxShadow: 'var(--shadow-card)'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                   <div>
-                    <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
+                    <h4 style={{ margin: 0, fontSize: 16, fontWeight: 900, textTransform: 'uppercase', color: 'var(--text-primary)' }}>
                       ISO 10816-3 Vibration Severity (Bar Chart)
                     </h4>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -1701,7 +1862,9 @@ export function IndustrialDashboard({
                       fontSize: 12,
                       fontWeight: 800,
                       padding: '3px 10px',
-                      borderRadius: 4,
+                      borderRadius: 0,
+                      border: '1px solid #000',
+                      boxShadow: 'var(--shadow-xs)',
                       background: faultColor,
                       color: '#060b14',
                       fontFamily: 'var(--font-mono)'
@@ -1711,54 +1874,57 @@ export function IndustrialDashboard({
                   </span>
                 </div>
 
-                <div style={{ width: '100%', height: 240 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={diagnosisResult.iso_levels || [
-                        { name: 'Zone A', limit: 0.12, fill: '#10d9a0' },
-                        { name: 'Zone B', limit: 0.22, fill: '#38bdf8' },
-                        { name: 'Zone C', limit: 0.45, fill: '#fbbf24' },
-                        { name: 'Zone D', limit: 0.70, fill: '#ef4444' }
-                      ]}
-                      margin={{ top: 10, right: 15, left: -20, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} interval={0} />
-                      <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} domain={[0, 0.8]} unit="g" />
-                      <Tooltip
-                        contentStyle={{ background: '#0d1525', border: '1px solid rgba(56, 189, 248, 0.4)', borderRadius: 8, fontSize: 12 }}
-                        formatter={(val) => [`${val} g`, 'Severity Threshold']}
-                      />
-                      <Bar dataKey="limit" radius={[8, 8, 0, 0]}>
-                        {(diagnosisResult.iso_levels || []).map((entry, idx) => (
-                          <Cell key={`cell-iso-${idx}`} fill={entry.fill || '#38bdf8'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {(() => {
+                  const isoData = diagnosisResult.iso_levels || [
+                    { name: 'Zone A', limit: 0.12, fill: '#10d9a0' },
+                    { name: 'Zone B', limit: 0.22, fill: '#38bdf8' },
+                    { name: 'Zone C', limit: 0.45, fill: '#fbbf24' },
+                    { name: 'Zone D', limit: 0.70, fill: '#ef4444' }
+                  ];
+                  return (
+                    <div style={{ width: '100%', height: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={isoData} margin={{ top: 10, right: 15, left: -20, bottom: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} interval={0} />
+                          <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} domain={[0, 0.8]} unit="g" />
+                          <Tooltip
+                            contentStyle={{ background: 'var(--bg-surface)', border: '2px solid var(--card-border-color)', borderRadius: 0, boxShadow: 'var(--shadow-sm)', color: 'var(--text-primary)', fontSize: 12 }}
+                            formatter={(val) => [`${val} g`, 'Severity Threshold']}
+                          />
+                          <Bar dataKey="limit" radius={[0, 0, 0, 0]}>
+                            {isoData.map((entry, idx) => (
+                              <Cell key={`cell-iso-${idx}`} fill={entry.fill || 'var(--text-primary)'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
             {/* ── Mechanical Workshop Recommendations ── */}
             <div
               style={{
-                background: 'var(--bg-surface-raised)',
-                borderRadius: 'var(--radius-md)',
+                background: 'var(--bg-surface)',
+                borderRadius: 0,
                 padding: '22px',
-                border: '1px solid var(--border-subtle)',
+                border: '2px solid var(--card-border-color)',
+                boxShadow: 'var(--shadow-card)',
                 marginBottom: 24
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                <Wrench size={20} style={{ color: '#38bdf8' }} />
-                <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
+                <Wrench size={20} style={{ color: 'var(--text-primary)' }} />
+                <h4 style={{ margin: 0, fontSize: 16, fontWeight: 900, textTransform: 'uppercase', color: 'var(--text-primary)' }}>
                   Practical Maintenance Directives for Workshop Mechanics:
                 </h4>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-                <div style={{ background: 'var(--bg-base)', padding: '16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ background: 'var(--bg-surface-raised)', padding: '16px', borderRadius: 0, border: '1px solid var(--border-subtle)' }}>
                   <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
                     DEFECT CHARACTERISTICS
                   </div>
@@ -1773,7 +1939,7 @@ export function IndustrialDashboard({
                   </div>
                 </div>
 
-                <div style={{ background: 'var(--bg-base)', padding: '16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ background: 'var(--bg-surface-raised)', padding: '16px', borderRadius: 0, border: '1px solid var(--border-subtle)' }}>
                   <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
                     WORKSHOP ACTION REQUIRED
                   </div>
@@ -1783,7 +1949,7 @@ export function IndustrialDashboard({
                   </div>
                 </div>
 
-                <div style={{ background: 'var(--bg-base)', padding: '16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ background: 'var(--bg-surface-raised)', padding: '16px', borderRadius: 0, border: '1px solid var(--border-subtle)' }}>
                   <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
                     TARGET INTERVENTION TIMELINE
                   </div>
@@ -1827,17 +1993,18 @@ export function IndustrialDashboard({
                   onClick={handleDownloadPdf}
                   style={{
                     padding: '13px 22px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1.5px solid #38bdf8',
-                    background: 'rgba(56, 189, 248, 0.12)',
-                    color: '#38bdf8',
+                    borderRadius: 0,
+                    border: '2px solid var(--card-border-color)',
+                    background: 'var(--bg-surface)',
+                    color: 'var(--text-primary)',
                     fontWeight: 800,
                     fontSize: 14,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    transition: 'all 0.15s ease'
+                    transition: 'all 0.15s ease',
+                    boxShadow: 'var(--shadow-btn)'
                   }}
                 >
                   <FileText size={18} />
@@ -1850,17 +2017,17 @@ export function IndustrialDashboard({
                   onClick={() => setDispatchModalOpen(true)}
                   style={{
                     padding: '13px 26px',
-                    borderRadius: 'var(--radius-md)',
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)',
-                    color: '#ffffff',
+                    borderRadius: 0,
+                    border: '2px solid var(--card-border-color)',
+                    background: 'var(--text-primary)',
+                    color: 'var(--bg-surface)',
                     fontWeight: 900,
                     fontSize: 14,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 10,
-                    boxShadow: '0 4px 18px rgba(56, 189, 248, 0.4)'
+                    boxShadow: 'var(--shadow-btn)'
                   }}
                 >
                   <CalendarCheck size={18} />
@@ -1875,22 +2042,22 @@ export function IndustrialDashboard({
                 style={{
                   marginTop: 22,
                   padding: '18px 24px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'rgba(16, 217, 160, 0.12)',
-                  border: '1.5px solid rgba(16, 217, 160, 0.5)',
+                  borderRadius: 0,
+                  background: 'var(--status-healthy-bg)',
+                  border: '2px solid var(--status-healthy)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   flexWrap: 'wrap',
                   gap: 14,
-                  boxShadow: '0 0 20px rgba(16, 217, 160, 0.2)'
+                  boxShadow: 'var(--shadow-card)'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <CheckCircle2 size={26} style={{ color: '#10d9a0' }} />
+                  <CheckCircle2 size={26} style={{ color: 'var(--status-healthy)' }} />
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#10d9a0' }}>
-                      Work Order Successfully Dispatched to Workshop Schedule!
+                    <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--status-healthy)' }}>
+                      WORK ORDER SUCCESSFULLY DISPATCHED TO WORKSHOP SCHEDULE!
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                       Maintenance task registered for {selectedMachine?.name} with assigned priority.
@@ -1904,17 +2071,17 @@ export function IndustrialDashboard({
                   onClick={onSwitchToSchedule}
                   style={{
                     padding: '10px 18px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: '#10d9a0',
-                    color: '#060b14',
-                    border: 'none',
-                    fontWeight: 800,
+                    borderRadius: 0,
+                    background: 'var(--status-healthy)',
+                    color: '#000000',
+                    border: '2px solid #000000',
+                    fontWeight: 900,
                     fontSize: 13,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    boxShadow: '0 0 12px rgba(16, 217, 160, 0.4)'
+                    boxShadow: 'var(--shadow-btn)'
                   }}
                 >
                   <span>View in Maintenance Schedule</span>
@@ -1934,29 +2101,28 @@ export function IndustrialDashboard({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.8)',
+            background: 'rgba(0,0,0,0.75)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: 20,
-            backdropFilter: 'blur(6px)'
+            padding: 20
           }}
         >
           <div
             style={{
               background: 'var(--bg-surface)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
+              borderRadius: 0,
+              border: '3px solid var(--card-border-color)',
               width: '100%',
               maxWidth: 560,
               padding: '26px',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.8), 0 0 30px rgba(56, 189, 248, 0.2)'
+              boxShadow: 'var(--shadow-xl)'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 19, fontWeight: 900, color: 'var(--text-primary)' }}>
+                <h3 style={{ margin: 0, fontSize: 19, fontWeight: 900, textTransform: 'uppercase', color: 'var(--text-primary)' }}>
                   Dispatch Corrective Maintenance Order
                 </h3>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -2111,12 +2277,13 @@ export function IndustrialDashboard({
                   onClick={() => setDispatchModalOpen(false)}
                   style={{
                     padding: '11px 18px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border-subtle)',
-                    background: 'transparent',
+                    borderRadius: 0,
+                    border: '2px solid var(--card-border-color)',
+                    background: 'var(--bg-surface-raised)',
                     color: 'var(--text-secondary)',
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    boxShadow: 'var(--shadow-xs)'
                   }}
                 >
                   Cancel
@@ -2126,13 +2293,13 @@ export function IndustrialDashboard({
                   id="btn-confirm-dispatch-order"
                   style={{
                     padding: '11px 24px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)',
-                    color: '#ffffff',
-                    fontWeight: 800,
+                    borderRadius: 0,
+                    border: '2px solid var(--card-border-color)',
+                    background: 'var(--text-primary)',
+                    color: 'var(--bg-surface)',
+                    fontWeight: 900,
                     cursor: 'pointer',
-                    boxShadow: '0 4px 14px rgba(56, 189, 248, 0.4)'
+                    boxShadow: 'var(--shadow-btn)'
                   }}
                 >
                   Confirm & Dispatch Work Order
@@ -2145,3 +2312,10 @@ export function IndustrialDashboard({
     </div>
   );
 }
+
+
+
+
+
+
+

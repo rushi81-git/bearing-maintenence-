@@ -54,12 +54,13 @@ export function Header({ title, subtitle, onOpenMobile }) {
             gap: 6,
             padding: '6px 12px',
             background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-full)',
+            border: '2px solid var(--card-border-color)',
+            borderRadius: 0,
+            boxShadow: 'var(--shadow-xs)',
             fontSize: 11,
-            fontWeight: 600,
+            fontWeight: 700,
             fontFamily: 'var(--font-mono)',
-            color: 'var(--text-secondary)'
+            color: 'var(--text-primary)'
           }}
         >
           <ShieldCheck size={14} style={{ color: 'var(--status-healthy)' }} />
@@ -73,7 +74,7 @@ export function Header({ title, subtitle, onOpenMobile }) {
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
           style={{
             padding: '8px 12px',
-            borderRadius: 'var(--radius-md)',
+            borderRadius: 0,
             background: 'var(--bg-surface)'
           }}
         >

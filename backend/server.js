@@ -612,8 +612,9 @@ app.post('/api/bearing-analysis', async (req, res) => {
       });
     }
 
-    // Call Python FastAPI ML Service (with graceful mathematical fallback)
+    // Call the trained Python model. Never present a heuristic as an AI result.
     let diagnosis = null;
+    let mlError = null;
     try {
       const mlResponse = await fetch(`${PYTHON_ML_URL}/predict`, {
         method: 'POST',
@@ -630,13 +631,20 @@ app.post('/api/bearing-analysis', async (req, res) => {
 
       if (mlResponse.ok) {
         diagnosis = await mlResponse.json();
+      } else {
+        mlError = `ML service returned HTTP ${mlResponse.status}`;
       }
-    } catch (_) {
-      // Python FastAPI microservice is offline; fall back to local signal processing engine
+    } catch (err) {
+      mlError = err.message;
     }
 
     if (!diagnosis) {
-      diagnosis = fallbackAnalyzeSignal(signal, parseInt(sampling_rate_hz, 10) || 48000, signal_unit || 'g', source_filename, bearing_location || 'Drive End (DE)');
+      console.error('Bearing ML prediction unavailable:', mlError);
+      return res.status(503).json({
+        success: false,
+        error: 'ML_SERVICE_UNAVAILABLE',
+        message: 'The bearing ML service is unavailable. Start the Python service on port 8000, then try again.'
+      });
     } else {
       // Ensure bar graph probability and ISO level arrays are enriched
       if (!diagnosis.probabilities) {
