@@ -480,7 +480,7 @@ function fallbackAnalyzeSignal(signal, sampling_rate_hz = 48000, signal_unit = '
     // Continuous defect size estimation
     const est = Math.max(0.005, Math.min(0.028, 0.007 + Math.max(0, (rms - 0.11) * 0.05 + (kurtosis - 3.2) * 0.002)));
     defect_size_inches = Math.round(est * 1000) / 1000;
-    
+
     // Normalize to discrete CWRU classes if close
     if (Math.abs(defect_size_inches - 0.007) < 0.003) defect_size_inches = 0.007;
     else if (Math.abs(defect_size_inches - 0.014) < 0.003) defect_size_inches = 0.014;
@@ -489,7 +489,7 @@ function fallbackAnalyzeSignal(signal, sampling_rate_hz = 48000, signal_unit = '
     severity = defect_size_inches >= 0.020 || rms > 0.32 ? 'Severe' : (defect_size_inches >= 0.012 || rms > 0.20 ? 'Moderate' : 'Mild');
     urgency = severity === 'Severe' ? 'High' : (severity === 'Moderate' ? 'Medium' : 'Low');
     predicted_class = defect_size_inches >= 0.020 ? 'IR_021' : (defect_size_inches >= 0.012 ? 'IR_014' : 'IR_007');
-    
+
     const locationPrefix = bearing_location.includes('Fan') ? 'Fan End (FE)' : 'Drive End (DE)';
     recommendation = `Inspect ${locationPrefix} inner bearing raceway for contact fatigue and spalling (${defect_size_inches}" defect). Verify shaft concentricity, lubrication film, and pulley alignment.`;
     confidence = 0.988;
@@ -847,12 +847,12 @@ app.get('/api/demo-samples', async (req, res) => {
       ml_service_online: false,
       message: 'Running in built-in telemetry simulation mode',
       samples: {
-        Normal:    { class: 'Normal',       fault_type: 'Normal',       severity: 'Healthy',  defect_size_inches: 0.000, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Normal', 0) },
-        Ball_007:  { class: 'Ball_007',     fault_type: 'Ball',         severity: 'Mild',     defect_size_inches: 0.007, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Ball', 0.007) },
-        Ball_014:  { class: 'Ball_014',     fault_type: 'Ball',         severity: 'Moderate', defect_size_inches: 0.014, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Ball', 0.014) },
-        IR_014:    { class: 'IR_014',       fault_type: 'Inner Race',   severity: 'Moderate', defect_size_inches: 0.014, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Inner Race', 0.014) },
-        IR_021:    { class: 'IR_021',       fault_type: 'Inner Race',   severity: 'Severe',   defect_size_inches: 0.021, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Inner Race', 0.021) },
-        OR_014:    { class: 'OR_014',       fault_type: 'Outer Race',   severity: 'Moderate', defect_size_inches: 0.014, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Outer Race', 0.014) }
+        Normal: { class: 'Normal', fault_type: 'Normal', severity: 'Healthy', defect_size_inches: 0.000, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Normal', 0) },
+        Ball_007: { class: 'Ball_007', fault_type: 'Ball', severity: 'Mild', defect_size_inches: 0.007, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Ball', 0.007) },
+        Ball_014: { class: 'Ball_014', fault_type: 'Ball', severity: 'Moderate', defect_size_inches: 0.014, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Ball', 0.014) },
+        IR_014: { class: 'IR_014', fault_type: 'Inner Race', severity: 'Moderate', defect_size_inches: 0.014, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Inner Race', 0.014) },
+        IR_021: { class: 'IR_021', fault_type: 'Inner Race', severity: 'Severe', defect_size_inches: 0.021, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Inner Race', 0.021) },
+        OR_014: { class: 'OR_014', fault_type: 'Outer Race', severity: 'Moderate', defect_size_inches: 0.014, sampling_rate_hz: 48000, signal_unit: 'g', signal: generateSyntheticSignal('Outer Race', 0.014) }
       }
     });
   }
@@ -921,6 +921,12 @@ app.get('/api/bearing-models', (req, res) => {
 // ──────────────────────────────────────────────────────────────────────────────
 // Start Node Express Server
 // ──────────────────────────────────────────────────────────────────────────────
+const frontendBuild = path.join(__dirname, '..', 'frontend', 'build');
+app.use(express.static(frontendBuild));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendBuild, 'index.html'));
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`\n=============================================================`);
